@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>상관관계 지도 - 상관행렬 변인 배치 도구(32robin@naver.com)</title>
+<style>
+:root{
+  --ink:#1b1f24; --muted:#6b7280; --line:#d9dce1; --panel:#f6f6f3;
+  --accent:#27466f; --accent-2:#1d3556; --warn:#a4372b; --ok:#2f6b45; --xl:#1e7a46;
+  --font:"Pretendard","Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic","Segoe UI",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:var(--font);color:var(--ink);background:#fff;display:flex;overflow:hidden;font-size:14px}
+button,input,select{font-family:inherit;font-size:inherit;color:inherit}
+
+/* ---------- 좌측 입력 패널 (1/3) ---------- */
+#left{width:33.333%;min-width:330px;height:100%;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+#left header{padding:16px 18px 6px}
+#left h1{font-size:19px;margin:0 0 4px;letter-spacing:-.02em}
+#left header p{margin:0;color:var(--muted);font-size:12.5px;line-height:1.55}
+#left header b{color:var(--ink)}
+.actions{display:flex;gap:8px;padding:8px 18px 10px}
+.actions button,.gridtools button,.toolbar button{
+  border:1px solid var(--line);background:#fff;border-radius:7px;padding:7px 12px;cursor:pointer;transition:background .15s,border-color .15s}
+.actions button:hover,.gridtools button:hover,.toolbar button:hover{background:#f0f1f3;border-color:#c3c7ce}
+.actions .primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;padding:7px 22px}
+.actions .primary:hover{background:var(--accent-2);border-color:var(--accent-2)}
+.primary .dot{display:none;width:7px;height:7px;border-radius:50%;background:#ffb454;margin-left:8px;vertical-align:middle}
+.primary.dirty .dot{display:inline-block;animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.25}}
+
+/* ---- 엑셀형 격자 ---- */
+#gridwrap{flex:1;min-height:100px;overflow:auto;margin:0 18px;border:1px solid #c4c7cc;background:#fff;position:relative}
+#grid{border-collapse:separate;border-spacing:0;table-layout:fixed;font-size:12.5px;user-select:none;-webkit-user-select:none;cursor:cell}
+#grid th{background:#f2f2f2;color:#555;font-weight:400;font-size:11.5px;height:24px;padding:0;text-align:center;
+  border-right:1px solid #d2d2d2;border-bottom:1px solid #d2d2d2;position:sticky;z-index:3}
+#grid thead th{top:0}
+#grid th.rh{left:0}
+#grid th.corner{left:0;top:0;z-index:6}
+#grid th.hl{background:#d3e4d9;color:#14573a;font-weight:600}
+#grid td{height:24px;padding:0 5px;border-right:1px solid #e3e5e8;border-bottom:1px solid #e3e5e8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#fff}
+#grid td.diag{background:#f8f8f8}
+#grid td.r0{position:sticky;top:24px;z-index:2;background:#f7f7f4;font-weight:600;border-bottom:2px solid #b9bdc4}
+#grid td.c0{position:sticky;left:38px;z-index:2;background:#f7f7f4;font-weight:600;border-right:2px solid #b9bdc4}
+#grid td.r0.c0{z-index:4}
+#grid td.sel{background:#dbe9e0}
+#grid td.r0.sel,#grid td.c0.sel{background:#cbe0d3}
+#grid td.act{outline:2px solid var(--xl);outline-offset:-2px;background:#fff}
+#grid td.err{background:#fde3df!important}
+#editor{position:fixed;left:-9999px;top:0;z-index:50;border:2px solid var(--xl);background:#fff;padding:0 4px;font-size:12.5px;
+  outline:none;opacity:0;pointer-events:none;box-sizing:border-box;border-radius:0}
+#editor.on{opacity:1;pointer-events:auto}
+
+.gridtools{display:flex;align-items:center;gap:8px;padding:10px 18px 4px}
+.gridtools button{padding:5px 10px;font-size:13px}
+.nbox{margin-left:auto;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.nbox input{width:70px;border:1px solid var(--line);border-radius:6px;padding:4px 6px;background:#fff}
+.msg{padding:2px 18px 8px;min-height:32px;font-size:12.5px;line-height:1.45;color:var(--muted)}
+.msg.err{color:var(--warn)} .msg.ok{color:var(--ok)}
+
+details#opts{border-top:1px solid var(--line);padding:0 18px;max-height:42%;overflow:auto;background:#f2f2ee}
+details#opts summary{cursor:pointer;padding:10px 0;font-weight:600;font-size:13px;list-style:none}
+details#opts summary::before{content:"▸ ";color:var(--muted)}
+details#opts[open] summary::before{content:"▾ "}
+.optgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;padding-bottom:14px}
+.optgrid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.optgrid label.wide{grid-column:1/-1}
+.optgrid select{border:1px solid var(--line);border-radius:6px;padding:5px 6px;background:#fff;color:var(--ink)}
+.optgrid input[type=range]{width:100%;accent-color:var(--accent)}
+.optgrid label.chk{flex-direction:row;align-items:center;gap:7px;color:var(--ink)}
+
+/* ---------- 우측 캔버스 (2/3) ---------- */
+#right{flex:1;position:relative;min-width:0;height:100%;overflow:hidden;background:#fff}
+#svg{cursor:grab;position:absolute;inset:0;width:100%;height:100%;touch-action:none;user-select:none;-webkit-user-select:none}
+#svg .node{cursor:grab}
+#svg text{user-select:none;-webkit-user-select:none}
+#empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9aa0a8;pointer-events:none;text-align:center;line-height:1.7}
+.toolbar{position:absolute;top:14px;right:14px;left:14px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;align-items:center;pointer-events:none}
+.toolbar>*{pointer-events:auto}
+.toolbar .hist{display:flex;gap:4px;margin-right:auto}
+.toolbar button:disabled{opacity:.4;cursor:default}
+.toolbar button{box-shadow:0 1px 2px rgba(0,0,0,.05);font-size:13px}
+.legend{position:absolute;left:14px;bottom:12px;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:8px;
+  padding:7px 11px;font-size:12px;color:var(--muted);line-height:1.6;pointer-events:none;max-width:calc(100% - 210px)}
+.fit{position:absolute;right:14px;bottom:12px;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:8px;
+  padding:7px 11px;font-size:12px;color:var(--muted);display:none;cursor:help}
+.legend b{color:var(--ink);font-weight:600}
+
+.tabs{display:flex;gap:2px;padding:0 18px;margin-top:2px}
+.tabs button{flex:1;border:1px solid var(--line);border-bottom:none;background:#ecece7;border-radius:8px 8px 0 0;padding:7px 10px;cursor:pointer;font-size:13px;color:var(--muted)}
+.tabs button.on{background:#fff;color:var(--ink);font-weight:600}
+.pane{flex:1 1 0;min-height:0;display:flex;flex-direction:column}
+.dtitle{position:sticky;top:0;z-index:2;background:#fff;font-weight:600;font-size:13px;padding:9px 0 6px;border-bottom:1px solid var(--line);margin:0 -14px;padding-left:14px}
+.quick{display:flex;flex-wrap:wrap;gap:8px;padding:0 18px 8px}
+.quick label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted);flex:1 1 130px;min-width:0}
+.quick select{border:1px solid var(--line);border-radius:7px;padding:5px 6px;background:#fff;font-size:12.5px;color:var(--ink);width:100%}
+#paneDesign{display:block;overflow:auto;margin:6px 18px 14px;padding:0 14px 10px;background:#fff;border:1px solid var(--line)}
+.dsec h3{font-size:12.5px;margin:14px 0 8px;color:var(--ink);letter-spacing:-.01em;border-bottom:1px solid #eceef1;padding-bottom:5px}
+.dsec select.full{width:100%;border:1px solid var(--line);border-radius:6px;padding:6px 7px;background:#fff}
+.optgrid input[type=color]{width:100%;height:28px;border:1px solid var(--line);border-radius:6px;padding:2px;background:#fff;cursor:pointer}
+.lt{display:flex;justify-content:space-between}
+.lt .v{color:var(--ink);font-variant-numeric:tabular-nums}
+.viewsel{display:flex;align-items:center;gap:6px;margin-right:6px;font-size:12.5px;color:var(--muted)}
+.viewsel select{border:1px solid var(--line);border-radius:7px;padding:6px 8px;background:#fff;font-size:13px;color:var(--ink)}
+@media (max-width:800px){
+  body{flex-direction:column;overflow:auto}
+  #left{width:100%;min-width:0;height:auto;border-right:0;border-bottom:1px solid var(--line)}
+  #gridwrap{min-height:260px;flex:none;max-height:340px}
+  #right{height:80vh;flex:none}
+}
+</style>
+</head>
+<body>
+
+<aside id="left">
+  <header>
+    <h1>상관 지도</h1>
+    <p>엑셀에서 표를 복사해 <b>A1</b> 칸을 선택하고 붙여넣기(Ctrl/⌘+V). 상관계수만 복사했다면 <b>B2</b> 칸에 붙여넣으세요.
+    변인명은 1행(열 변인)·A열(행 변인)이며, <b>변인명이 빈 행·열은 구현할 때 무시</b>됩니다.
+    행·열 변인이 서로 다른 직사각 표도 그대로 붙여넣으면 자동으로 인식합니다.</p>
+  </header>
+
+  <div class="actions">
+    <button id="btnRun" class="primary" title="Ctrl/⌘ + Enter">구현<i class="dot"></i></button>
+    <button id="btnExample">예시 불러오기</button>
+    <button id="btnClear">비우기</button>
+  </div>
+  <div class="quick">
+    <label>스타일 프리셋<select id="oPreset2"></select></label>
+    <label>배치 표 형태<select id="oMode2"></select></label>
+    <label>거리 기준<select id="oMetric2"></select></label>
+  </div>
+
+  <div id="paneGrid" class="pane">
+    <div id="gridwrap"><table id="grid"></table></div>
+    <input id="editor" autocomplete="off" spellcheck="false" aria-label="셀 입력">
+    <div class="gridtools">
+      <button id="btnAdd">＋ 변인</button>
+      <button id="btnDel">－ 변인</button>
+      <label class="nbox" title="입력하면 상관계수에 * p&lt;.05, ** p&lt;.01, *** p&lt;.001 표시가 붙습니다">표본 수 N
+        <input id="oN" type="number" min="3" step="1" placeholder="선택"></label>
+    </div>
+  </div>
+
+  <div id="paneDesign" class="pane"><div class="dtitle">디자인 옵션</div>
+    <div class="dsec">
+      <h3>스타일 프리셋</h3>
+      <select id="oPreset" class="full">
+        <option value="clear">읽기 쉬운 컬러 (추천)</option>
+        <option value="core">핵심 관계만 (변인마다 상위 3개)</option>
+        <option value="paper">논문용 흑백</option>
+        <option value="custom">사용자 지정</option>
+      </select>
+    </div>
+    <div class="dsec"><h3>선</h3><div class="optgrid">
+      <label class="wide">선 색상
+        <select id="oColor"><option value="sign">부호별 색 (양·음을 색으로 구분)</option><option value="black">검정</option></select></label>
+      <label>양(+) 색<input type="color" id="oPos"></label>
+      <label>음(−) 색<input type="color" id="oNeg"></label>
+      <label class="chk"><input type="checkbox" id="oDash">음(−)은 점선</label>
+      <label class="chk"><input type="checkbox" id="oThick">굵기 ∝ |r|</label>
+      <label><span class="lt">굵기 배율<span class="v" id="v_oWidth"></span></span><input type="range" id="oWidth" min="50" max="250" step="10"></label>
+      <label class="chk"><input type="checkbox" id="oFadeR">약한 선은 흐리게</label>
+      <label class="chk"><input type="checkbox" id="oFadeNS">유의하지 않은 선은 흐리게</label>
+      <label><span class="lt">선 표시 기준 |r| ≥<span class="v" id="v_oMin"></span></span><input type="range" id="oMin" min="0" max="90"></label>
+      <label><span class="lt">변인마다 강한 선만<span class="v" id="v_oTopK"></span></span><input type="range" id="oTopK" min="0" max="8"></label>
+      <label class="chk wide"><input type="checkbox" id="oHideNS">유의하지 않은 선 숨기기 (표본 수 N 또는 표의 별표 기준)</label>
+    </div></div>
+    <div class="dsec"><h3>상관계수 라벨</h3><div class="optgrid">
+      <label class="wide">표시 방식
+        <select id="oLabelMode">
+          <option value="strong">강한 상관만 (+ 강조한 변인의 선)</option>
+          <option value="all">모두</option>
+          <option value="focus">강조한 변인의 선만</option>
+          <option value="none">숨김</option>
+        </select></label>
+      <label><span class="lt">강한 상관 기준 |r| ≥<span class="v" id="v_oLabelMin"></span></span><input type="range" id="oLabelMin" min="0" max="90"></label>
+      <label><span class="lt">글자 크기<span class="v" id="v_oLabelSize"></span></span><input type="range" id="oLabelSize" min="9" max="18"></label>
+      <label><span class="lt">선 위의 위치<span class="v" id="v_oLabelPos"></span></span><input type="range" id="oLabelPos" min="10" max="90"></label>
+      <label>배경<select id="oLabelStyle"><option value="box">흰 박스</option><option value="halo">글자 테두리만</option></select></label>
+      <label class="chk wide"><input type="checkbox" id="oApa">APA 표기 (.45)</label>
+    </div></div>
+    <div class="dsec"><h3>변인 (노드)</h3><div class="optgrid">
+      <label>색<select id="oNodeColor"><option value="set">행·열 구분 색</option><option value="white">흰색</option></select></label>
+      <label><span class="lt">글자 크기<span class="v" id="v_oNodeFs"></span></span><input type="range" id="oNodeFs" min="11" max="22"></label>
+      <label>모양
+        <select id="oShape"><option value="rect">네모 (기본)</option><option value="ellipse">원(타원)</option></select></label>
+      <label class="chk"><input type="checkbox" id="oHover">마우스 올리면 미리 강조</label>
+    </div></div>
+    <div class="dsec"><h3>배치</h3><div class="optgrid">
+      <label class="wide">표 형태
+        <select id="oMode">
+          <option value="auto" selected>자동 판별</option>
+          <option value="square">정사각 상관행렬 (행·열 변인이 같음)</option>
+          <option value="rect">직사각 표 (행·열 변인이 다름)</option>
+        </select></label>
+      <label class="wide">거리 기준
+        <select id="oMetric">
+          <option value="abs">강도만 — |r|이 클수록 가깝게</option>
+          <option value="signed">부호 반영 — 정적일수록 가깝게, 부적일수록 멀리</option>
+        </select></label>
+      <label><span class="lt">거리 대비<span class="v" id="v_oContrast"></span></span><input type="range" id="oContrast" min="0" max="100"></label>
+      <label><span class="lt">간격<span class="v" id="v_oScale"></span></span><input type="range" id="oScale" min="60" max="160"></label>
+      <label><span class="lt">등장 탄성<span class="v" id="v_oElastic"></span></span><input type="range" id="oElastic" min="0" max="100"></label>
+    </div></div>
+  </div>
+
+  <div id="msg" class="msg"></div>
+</aside>
+
+<main id="right">
+  <svg id="svg" xmlns="http://www.w3.org/2000/svg">
+    <g id="board">
+      <g id="gEdges" pointer-events="none"></g>
+      <g id="gLabels" pointer-events="none"></g>
+      <g id="gNodes"></g>
+      <g id="gTop" pointer-events="none"></g>
+    </g>
+  </svg>
+  <div id="empty">왼쪽 표에 상관행렬을 붙여넣고<br><b>구현</b>을 눌러 주세요.</div>
+  <div class="toolbar">
+    <span class="hist">
+      <button id="btnUndo" title="되돌리기 (Ctrl/⌘+Z)" disabled>↶ 되돌리기</button>
+      <button id="btnRedo" title="다시하기 (Ctrl/⌘+Y 또는 Ctrl/⌘+Shift+Z)" disabled>↷ 다시하기</button>
+    </span>
+    <label class="viewsel">보기
+      <select id="oView">
+        <option value="map">거리 지도</option>
+        <option value="bipartite">양분 배치 (좌·우 두 열)</option>
+        <option value="circle">원형 배치</option>
+      </select>
+    </label>
+    <button id="btnRespread" title="처음 배치로 되돌리고 다시 펼칩니다">다시 펼치기</button>
+    <button id="btnSave" title="표 + 노드 위치 + 선·디자인 설정을 JSON 파일로 저장">설정 저장</button>
+    <button id="btnLoad" title="저장해 둔 JSON 파일을 불러와 그대로 복원">설정 불러오기</button>
+    <input type="file" id="fileLoad" accept=".json,application/json" style="display:none">
+    <button id="btnSvg" title="논문·PPT용 벡터 이미지">SVG 저장</button>
+    <button id="btnPng" title="고해상도 이미지">PNG 저장</button>
+  </div>
+  <div class="legend">
+    <span id="legendNear"><b>가까울수록 상관이 높음</b> · </span><span id="legendColor"></span> · 변인 클릭: 연결선 강조 켜기/끄기 · 변인 드래그: 그 변인만 이동 · 빈 배경 드래그: 전체 회전<span id="legendRect" style="display:none"> · <b>연두 = 행 변인 · 연보라 = 열 변인</b></span>
+  </div>
+  <div id="fit" class="fit"></div>
+</main>
+
+<script>
+(()=>{
+'use strict';
+const $ = s => document.querySelector(s);
+const SVGNS = 'http://www.w3.org/2000/svg';
+const FONT = "'Pretendard','Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic','Segoe UI',sans-serif";
+const MAXN = 40, DEFAULT_NV = 20;
+const NODE_FS = 15, LABEL_FS = 12;
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* =====================================================================
+   1. 통계 — 상관계수의 양측 p값
+   ===================================================================== */
+function lgamma(x){
+  const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];
+  let y=x, tmp=x+5.5; tmp-=(x+0.5)*Math.log(tmp);
+  let ser=1.000000000190015;
+  for(let j=0;j<6;j++) ser+=c[j]/++y;
+  return -tmp+Math.log(2.5066282746310005*ser/x);
+}
+function betacf(a,b,x){
+  const FP=1e-300; const qab=a+b,qap=a+1,qam=a-1;
+  let c=1,d=1-qab*x/qap; if(Math.abs(d)<FP)d=FP; d=1/d; let h=d;
+  for(let m=1;m<=200;m++){
+    const m2=2*m;
+    let aa=m*(b-m)*x/((qam+m2)*(a+m2));
+    d=1+aa*d; if(Math.abs(d)<FP)d=FP; c=1+aa/c; if(Math.abs(c)<FP)c=FP; d=1/d; h*=d*c;
+    aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));
+    d=1+aa*d; if(Math.abs(d)<FP)d=FP; c=1+aa/c; if(Math.abs(c)<FP)c=FP; d=1/d;
+    const del=d*c; h*=del;
+    if(Math.abs(del-1)<3e-12)break;
+  }
+  return h;
+}
+function ibeta(x,a,b){
+  if(x<=0)return 0; if(x>=1)return 1;
+  const bt=Math.exp(lgamma(a+b)-lgamma(a)-lgamma(b)+a*Math.log(x)+b*Math.log(1-x));
+  return x<(a+1)/(a+b+2) ? bt*betacf(a,b,x)/a : 1-bt*betacf(b,a,1-x)/b;
+}
+function pFromR(r,N){
+  const df=N-2; if(!(df>=1)) return NaN;
+  const a=Math.abs(r); if(a>=1) return 0;
+  const t2=a*a*df/(1-a*a);
+  return ibeta(df/(df+t2), df/2, 0.5);
+}
+const stars = p => !(p>=0) ? '' : p<.001?'***' : p<.01?'**' : p<.05?'*' : '';
+
+/* =====================================================================
+   2. 셀 값 해석 (논문 표 형식 허용: .45** , −.32 , — , 0,45 …)
+   ===================================================================== */
+function classify(raw){
+  const s=(raw==null?'':String(raw)).trim();
+  if(s==='' || /^[-–—−‒]+$/.test(s)) return {type:'empty'};
+  const t=s.replace(/[*†‡]+$/,'').replace(/\s/g,'').replace(/[−–—‒]/g,'-').replace(/^([-+]?\d*),(\d+)$/,'$1.$2');
+  if(/^[-+]?(\d+\.?\d*|\.\d+)$/.test(t)) return {type:'num', v:parseFloat(t), s};
+  return {type:'text', s};
+}
+function cleanName(s){ return String(s||'').replace(/^\s*\d+\s*[.)]\s*/,'').trim(); }
+
+/* =====================================================================
+   3. 엑셀형 입력 격자
+      data[0][c] = 열 변인명(1행), data[r][0] = 행 변인명(A열), data[r][c] = 상관계수
+   ===================================================================== */
+const wrap=$('#gridwrap'), grid=$('#grid'), editor=$('#editor');
+let nv=DEFAULT_NV;
+const makeData = n => Array.from({length:n+1},()=>Array(n+1).fill(''));
+let data=makeData(nv);
+let gsel={ar:0,ac:0,fr:0,fc:0};            // 선택 범위: 기준 칸(ar,ac) ~ 끝 칸(fr,fc)
+let editing=false, editMode='enter', selecting=null, mouse={x:0,y:0};
+let cellEls=[], colHeads=[], rowHeads=[], litCells=[], litHeads=[];
+let dirty=false;
+const undoStack=[], redoStack=[];
+
+function setMsg(t,kind=''){ const m=$('#msg'); m.textContent=t||''; m.className='msg '+kind; }
+function markDirty(v=true){ dirty=v; $('#btnRun').classList.toggle('dirty',v); }
+function markStale(){ if(G) G.stale=true; }
+function colLetter(c){ let s=''; c++; while(c>0){ const m=(c-1)%26; s=String.fromCharCode(65+m)+s; c=Math.floor((c-1)/26); } return s; }
+
+function buildGrid(){
+  grid.innerHTML='';
+  grid.style.width=(38+104+66*nv)+'px';
+  const cg=document.createElement('colgroup');
+  cg.innerHTML='<col style="width:38px"><col style="width:104px">'+'<col style="width:66px">'.repeat(nv);
+  grid.appendChild(cg);
+  const thead=document.createElement('thead'), trh=document.createElement('tr');
+  const corner=document.createElement('th'); corner.className='corner'; trh.appendChild(corner);
+  colHeads=[];
+  for(let c=0;c<=nv;c++){ const th=document.createElement('th'); th.className='ch'; th.dataset.c=c; th.textContent=colLetter(c); trh.appendChild(th); colHeads.push(th); }
+  thead.appendChild(trh); grid.appendChild(thead);
+  const tb=document.createElement('tbody'); cellEls=[]; rowHeads=[];
+  for(let r=0;r<=nv;r++){
+    const tr=document.createElement('tr'), row=[];
+    const th=document.createElement('th'); th.className='rh'; th.dataset.r=r; th.textContent=r+1; tr.appendChild(th); rowHeads.push(th);
+    for(let c=0;c<=nv;c++){
+      const td=document.createElement('td');
+      td.dataset.r=r; td.dataset.c=c;
+      td.className=(r===0?'r0 ':'')+(c===0?'c0 ':'')+(r===c&&r>0?'diag':'');
+      td.textContent=data[r][c];
+      tr.appendChild(td); row.push(td);
+    }
+    tb.appendChild(tr); cellEls.push(row);
+  }
+  grid.appendChild(tb);
+  litCells=[]; litHeads=[];
+  $('#btnAdd').disabled=nv>=MAXN; $('#btnDel').disabled=nv<=2;
+  gsel.ar=clamp(gsel.ar,0,nv); gsel.ac=clamp(gsel.ac,0,nv); gsel.fr=clamp(gsel.fr,0,nv); gsel.fc=clamp(gsel.fc,0,nv);
+  paintSel();
+}
+function setCellText(r,c){ const td=cellEls[r]&&cellEls[r][c]; if(td){ td.textContent=data[r][c]; td.classList.remove('err'); } }
+function refreshAll(){ for(let r=0;r<=nv;r++)for(let c=0;c<=nv;c++) setCellText(r,c); }
+function resizeData(n){
+  const nd=makeData(n);
+  for(let r=0;r<=Math.min(n,nv);r++)for(let c=0;c<=Math.min(n,nv);c++) nd[r][c]=data[r][c];
+  data=nd; nv=n;
+}
+const rng=()=>({r0:Math.min(gsel.ar,gsel.fr),r1:Math.max(gsel.ar,gsel.fr),c0:Math.min(gsel.ac,gsel.fc),c1:Math.max(gsel.ac,gsel.fc)});
+
+function paintSel(){
+  litCells.forEach(td=>td.classList.remove('sel','act')); litCells=[];
+  litHeads.forEach(h=>h.classList.remove('hl')); litHeads=[];
+  const {r0,r1,c0,c1}=rng();
+  for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++){ const td=cellEls[r]&&cellEls[r][c]; if(td){ td.classList.add('sel'); litCells.push(td); } }
+  const act=cellEls[gsel.ar]&&cellEls[gsel.ar][gsel.ac]; if(act){ act.classList.add('act'); }
+  for(let c=c0;c<=c1;c++){ colHeads[c]&&(colHeads[c].classList.add('hl'), litHeads.push(colHeads[c])); }
+  for(let r=r0;r<=r1;r++){ rowHeads[r]&&(rowHeads[r].classList.add('hl'), litHeads.push(rowHeads[r])); }
+  placeEditor();
+}
+function placeEditor(){
+  const td=cellEls[gsel.ar]&&cellEls[gsel.ar][gsel.ac]; if(!td) return;
+  const r=td.getBoundingClientRect();
+  editor.style.left=r.left+'px'; editor.style.top=r.top+'px';
+  editor.style.width=(editing?Math.max(r.width,150):r.width)+'px'; editor.style.height=r.height+'px';
+}
+function focusEditor(){ if(document.activeElement!==editor) editor.focus({preventScroll:true}); }
+function ensureVisible(r,c){
+  const td=cellEls[r]&&cellEls[r][c]; if(!td) return;
+  const tr=td.getBoundingClientRect(), wr=wrap.getBoundingClientRect();
+  const left=wr.left+38+(c>0?104:0), top=wr.top+24+(r>0?24:0);
+  const right=wr.left+wrap.clientWidth, bottom=wr.top+wrap.clientHeight;
+  if(tr.left<left) wrap.scrollLeft-=left-tr.left; else if(tr.right>right) wrap.scrollLeft+=tr.right-right;
+  if(tr.top<top) wrap.scrollTop-=top-tr.top; else if(tr.bottom>bottom) wrap.scrollTop+=tr.bottom-bottom;
+  placeEditor();
+}
+function moveSel(dr,dc,extend){
+  if(extend){ gsel.fr=clamp(gsel.fr+dr,0,nv); gsel.fc=clamp(gsel.fc+dc,0,nv); paintSel(); ensureVisible(gsel.fr,gsel.fc); }
+  else{ const r=clamp(gsel.ar+dr,0,nv), c=clamp(gsel.ac+dc,0,nv); gsel={ar:r,ac:c,fr:r,fc:c}; paintSel(); ensureVisible(r,c); }
+}
+
+/* ---- 되돌리기 / 다시하기: 표 편집 + 캔버스(노드 위치·회전) + 디자인 옵션 + 구현을 한 줄로 기록 ---- */
+function snapshot(){
+  return {nv,data:data.map(r=>r.slice()),gsel:{...gsel},dirty,
+    opt:JSON.parse(JSON.stringify(opt)),mode:$('#oMode').value,preset:$('#oPreset').value,
+    canvas:G?{res:G.res,stale:G.stale,rs:G.rs,pos:G.nodes.map(n=>[n.x,n.y])}:null};
+}
+function updateHistBtns(){ $('#btnUndo').disabled=!undoStack.length; $('#btnRedo').disabled=!redoStack.length; }
+function pushUndo(){ undoStack.push(snapshot()); if(undoStack.length>100) undoStack.shift(); redoStack.length=0; updateHistBtns(); }
+function restore(s){
+  finishAnims(); drag=null; spin=null;
+  nv=s.nv; data=s.data.map(r=>r.slice()); gsel={...s.gsel}; buildGrid();
+  applyOptState(s.opt,s.mode,s.preset);
+  if(s.canvas){
+    if(G && G.res===s.canvas.res){                     // 같은 그래프: 위치·모양만 되돌림
+      focusNode=null; hoverNode=null; refreshView();
+      G.nodes.forEach(refreshNodeLabel); sizeAll();
+      G.nodes.forEach((n,i)=>{ n.x=s.canvas.pos[i][0]; n.y=s.canvas.pos[i][1]; n.s=1; });
+      refreshEdgeStyles(); boardOp=1;
+    } else buildGraph(s.canvas.res,{pos:s.canvas.pos});
+    G.rs=s.canvas.rs; G.stale=s.canvas.stale; updateFit(); render();
+  } else clearCanvas();
+  markDirty(s.dirty); setMsg('');
+}
+function undo(){ if(editing) commitEdit(); if(!undoStack.length) return; redoStack.push(snapshot()); restore(undoStack.pop()); updateHistBtns(); }
+function redo(){ if(editing) commitEdit(); if(!redoStack.length) return; undoStack.push(snapshot()); restore(redoStack.pop()); updateHistBtns(); }
+
+/* ---- 편집 ---- */
+function beginEdit(mode,load){
+  if(editing) return;
+  editing=true; editMode=mode; editor.classList.add('on'); placeEditor();
+  if(load){ editor.value=data[gsel.ar][gsel.ac]; const L=editor.value.length; editor.setSelectionRange(L,L); }
+}
+function commitEdit(){
+  if(!editing) return;
+  const v=editor.value; editing=false; editor.classList.remove('on'); editor.value=''; placeEditor();
+  applyCellEdit(gsel.ar,gsel.ac,v);
+}
+function cancelEdit(){ editing=false; editor.classList.remove('on'); editor.value=''; placeEditor(); }
+const isNumHdr=s=>/^\d+$/.test(cleanName(s));     // APA 표의 열 머리글 "1", "2", "3" …
+function nameOf(k){ return cleanName(data[k][0]) || (isNumHdr(data[0][k])?'':cleanName(data[0][k])); }
+function nameForKey(key){
+  if(typeof key==='number') return nameOf(key);
+  const i=+key.slice(1); return key[0]==='r' ? cleanName(data[i][0]) : cleanName(data[0][i]);
+}
+function applyCellEdit(r,c,v){
+  const old=data[r][c]; if(old===v) return;
+  pushUndo(); data[r][c]=v; setCellText(r,c);
+  if(r===0&&c===0) return;
+  if(r===0||c===0){
+    let key;
+    if(G && G.mode==='rect') key = r===0 ? 'c'+c : 'r'+r;
+    else{
+      const k=r===0?c:r, pr=r===0?k:0, pc=r===0?0:k;
+      if(old!=='' && data[pr][pc]===old){ data[pr][pc]=v; setCellText(pr,pc); }   // 행·열 이름이 같았다면 함께 바꿈
+      key=k;
+    }
+    renameFromGrid(key);
+  }else markDirty(true);
+}
+function renameFromGrid(key){
+  const name=nameForKey(key);
+  if(G && !G.stale){
+    const nd=G.nodes.find(n=>n.v===key);
+    if(nd && name){ nd.name=name; refreshNodeLabel(nd); sizeNode(nd); applyShape(nd); requestRender(); return; }
+  }
+  markDirty(true);
+}
+function clearSel(){
+  pushUndo(); const {r0,r1,c0,c1}=rng();
+  for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++){ data[r][c]=''; setCellText(r,c); }
+  markDirty(true); markStale();
+}
+
+/* ---- 복사 / 붙여넣기 (TSV) ---- */
+function rangeTSV(){
+  const {r0,r1,c0,c1}=rng(), rows=[];
+  for(let r=r0;r<=r1;r++){ const row=[]; for(let c=c0;c<=c1;c++) row.push(data[r][c]); rows.push(row.join('\t')); }
+  return rows.join('\n');
+}
+function parseTSV(text){
+  const t=text.replace(/\r\n?/g,'\n'); const lines=t.split('\n');
+  if(lines.length>1 && lines[lines.length-1]==='') lines.pop();
+  let rows;
+  if(/\t/.test(t)) rows=lines.map(l=>l.split('\t'));
+  else{
+    const cc=lines.map(l=>(l.match(/,/g)||[]).length);
+    rows = cc[0]>0 && cc.every(x=>x===cc[0]) ? lines.map(l=>l.split(',')) : lines.map(l=>[l]);
+  }
+  rows=rows.map(r=>r.map(c=>{ c=c.trim(); if(/^".*"$/s.test(c)) c=c.slice(1,-1).replace(/""/g,'"'); return c.trim(); }));
+  const w=Math.max(...rows.map(r=>r.length)); rows.forEach(r=>{ while(r.length<w) r.push(''); });
+  return rows;
+}
+function pasteText(text){
+  const rows=parseTSV(text); const h=rows.length, w=rows[0].length;
+  const {r0,r1,c0,c1}=rng();
+  const fill = h===1&&w===1 && (r1>r0||c1>c0);
+  const rh=fill?(r1-r0+1):h, cw=fill?(c1-c0+1):w;
+  const need=Math.max(r0+rh-1,c0+cw-1);
+  pushUndo();
+  let note='';
+  if(need>nv){ const target=Math.min(need,MAXN); resizeData(target); buildGrid(); if(need>MAXN) note=` (변인은 최대 ${MAXN}개까지라 넘는 부분은 잘렸어요)`; }
+  let lastR=r0,lastC=c0;
+  for(let i=0;i<rh;i++)for(let j=0;j<cw;j++){
+    const r=r0+i,c=c0+j; if(r>nv||c>nv) continue;
+    data[r][c]=fill?rows[0][0]:rows[i][j]; setCellText(r,c); lastR=r; lastC=c;
+  }
+  gsel={ar:r0,ac:c0,fr:lastR,fc:lastC}; paintSel(); ensureVisible(r0,c0);
+  markDirty(true); markStale();
+  setMsg(`${rh}행 × ${cw}열을 붙여넣었어요.${note} ‘구현’을 눌러 보세요.`,'ok');
+}
+function handlePaste(e){
+  const text=(e.clipboardData||window.clipboardData).getData('text/plain')||'';
+  const multi=/[\t\n]/.test(text.replace(/\r?\n$/,''));
+  if(editing && !multi) return;                    // 편집 중 한 칸짜리 붙여넣기는 기본 동작
+  e.preventDefault(); if(editing) cancelEdit();
+  if(text==='') return;
+  pasteText(text);
+}
+editor.addEventListener('paste',handlePaste);
+document.addEventListener('paste',e=>{
+  if(e.target===editor) return;
+  const t=e.target; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT')) return;
+  handlePaste(e);
+});
+editor.addEventListener('copy',e=>{ if(editing) return; e.preventDefault(); e.clipboardData.setData('text/plain',rangeTSV()); });
+editor.addEventListener('cut',e=>{ if(editing) return; e.preventDefault(); e.clipboardData.setData('text/plain',rangeTSV()); clearSel(); });
+
+/* ---- 키보드 ---- */
+const ARROWS={ArrowUp:[-1,0],ArrowDown:[1,0],ArrowLeft:[0,-1],ArrowRight:[0,1]};
+editor.addEventListener('keydown',e=>{
+  const mod=e.ctrlKey||e.metaKey;
+  if(editing){
+    if(e.isComposing||e.keyCode===229) return;
+    if(mod) return;
+    if(e.key==='Enter'){ e.preventDefault(); commitEdit(); moveSel(e.shiftKey?-1:1,0,false); return; }
+    if(e.key==='Tab'){ e.preventDefault(); commitEdit(); moveSel(0,e.shiftKey?-1:1,false); return; }
+    if(e.key==='Escape'){ e.preventDefault(); cancelEdit(); return; }
+    if(editMode==='enter' && ARROWS[e.key]){ e.preventDefault(); commitEdit(); const d=ARROWS[e.key]; moveSel(d[0],d[1],false); }
+    return;
+  }
+  if(e.isComposing||e.keyCode===229){ beginEdit('enter',false); return; }   // 한글 IME 입력 시작
+  if(mod){
+    const k=e.key.toLowerCase();
+    if(k==='a'){ e.preventDefault(); gsel={ar:0,ac:0,fr:nv,fc:nv}; paintSel(); }
+    else if(k==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); }
+    else if(k==='y'){ e.preventDefault(); redo(); }
+    return;
+  }
+  if(ARROWS[e.key]){ e.preventDefault(); const d=ARROWS[e.key]; moveSel(d[0],d[1],e.shiftKey); return; }
+  switch(e.key){
+    case 'Enter': e.preventDefault(); moveSel(e.shiftKey?-1:1,0,false); break;
+    case 'Tab': e.preventDefault(); moveSel(0,e.shiftKey?-1:1,false); break;
+    case 'F2': e.preventDefault(); beginEdit('edit',true); break;
+    case 'Delete': case 'Backspace': e.preventDefault(); clearSel(); break;
+    default: if(e.key.length===1 && !e.altKey) beginEdit('enter',false);
+  }
+});
+editor.addEventListener('input',()=>{ if(!editing && editor.value!=='') beginEdit('enter',false); });
+editor.addEventListener('blur',()=>{ if(editing) commitEdit(); });
+wrap.addEventListener('scroll',placeEditor);
+window.addEventListener('resize',placeEditor);
+
+/* ---- 마우스: 클릭 / 드래그로 범위 선택 ---- */
+function extendTo(el){
+  let ch=false;
+  if(selecting==='cell' && el.tagName==='TD'){ const r=+el.dataset.r,c=+el.dataset.c; if(r!==gsel.fr||c!==gsel.fc){ gsel.fr=r; gsel.fc=c; ch=true; } }
+  else if(selecting==='col' && el.dataset.c!==undefined){ const c=+el.dataset.c; if(c!==gsel.fc){ gsel.fc=c; ch=true; } }
+  else if(selecting==='row' && el.dataset.r!==undefined){ const r=+el.dataset.r; if(r!==gsel.fr){ gsel.fr=r; ch=true; } }
+  if(ch) paintSel();
+}
+function selLoop(){
+  if(!selecting) return;
+  const wr=wrap.getBoundingClientRect();
+  const leftEdge=wr.left+38+(gsel.ac>0?104:0)+8, topEdge=wr.top+24+(gsel.ar>0?24:0)+8;
+  const rightEdge=wr.left+wrap.clientWidth-10, bottomEdge=wr.top+wrap.clientHeight-10;
+  let dx=0,dy=0;
+  if(mouse.x<leftEdge && wrap.scrollLeft>0) dx=-Math.min(30,(leftEdge-mouse.x)/3+4);
+  else if(mouse.x>rightEdge) dx=Math.min(30,(mouse.x-rightEdge)/3+4);
+  if(mouse.y<topEdge && wrap.scrollTop>0) dy=-Math.min(30,(topEdge-mouse.y)/3+4);
+  else if(mouse.y>bottomEdge) dy=Math.min(30,(mouse.y-bottomEdge)/3+4);
+  if(dx||dy){ wrap.scrollLeft+=dx; wrap.scrollTop+=dy; }
+  const px=clamp(mouse.x,wr.left+1,wr.left+wrap.clientWidth-2), py=clamp(mouse.y,wr.top+1,wr.top+wrap.clientHeight-2);
+  const el=document.elementFromPoint(px,py), cell=el&&el.closest&&el.closest('td,th');
+  if(cell && grid.contains(cell)) extendTo(cell);
+  requestAnimationFrame(selLoop);
+}
+grid.addEventListener('mousedown',e=>{
+  if(e.button!==0) return;
+  const el=e.target.closest('td,th'); if(!el) return;
+  e.preventDefault(); if(editing) commitEdit();
+  mouse={x:e.clientX,y:e.clientY};
+  if(el.tagName==='TD'){
+    const r=+el.dataset.r,c=+el.dataset.c;
+    if(e.shiftKey) { gsel.fr=r; gsel.fc=c; } else gsel={ar:r,ac:c,fr:r,fc:c};
+    selecting='cell';
+  }else if(el.classList.contains('ch')){ const c=+el.dataset.c; gsel={ar:0,ac:c,fr:nv,fc:c}; selecting='col'; }
+  else if(el.classList.contains('rh')){ const r=+el.dataset.r; gsel={ar:r,ac:0,fr:r,fc:nv}; selecting='row'; }
+  else{ gsel={ar:0,ac:0,fr:nv,fc:nv}; }
+  paintSel(); focusEditor();
+  if(selecting) requestAnimationFrame(selLoop);
+});
+window.addEventListener('mousemove',e=>{ mouse={x:e.clientX,y:e.clientY}; });
+window.addEventListener('mouseup',()=>{ if(selecting){ selecting=null; focusEditor(); } });
+grid.addEventListener('dblclick',e=>{
+  const el=e.target.closest('td'); if(!el) return;
+  gsel={ar:+el.dataset.r,ac:+el.dataset.c,fr:+el.dataset.r,fc:+el.dataset.c}; paintSel(); focusEditor(); beginEdit('edit',true);
+});
+
+/* ---- 버튼 ---- */
+$('#btnAdd').onclick=()=>{ if(nv>=MAXN) return; pushUndo(); resizeData(nv+1); buildGrid(); markDirty(); markStale(); };
+$('#btnDel').onclick=()=>{ if(nv<=2) return; pushUndo(); resizeData(nv-1); buildGrid(); markDirty(); markStale(); };
+$('#btnClear').onclick=()=>{
+  pushUndo(); nv=DEFAULT_NV; data=makeData(nv); gsel={ar:0,ac:0,fr:0,fc:0}; buildGrid(); markDirty(false); markStale();
+  setMsg('표를 비웠어요. 엑셀에서 복사해 A1 칸에 붙여넣어 보세요.'); focusEditor();
+};
+const EXAMPLE = [
+  ['','우울','불안','스트레스','자기효능감','삶의 만족'],
+  ['우울','1','.68','.61','-.47','-.58'],
+  ['불안','.68','1','.72','-.39','-.44'],
+  ['스트레스','.61','.72','1','-.35','-.41'],
+  ['자기효능감','-.47','-.39','-.35','1','.52'],
+  ['삶의 만족','-.58','-.44','-.41','.52','1']
+].map(r=>r.join('\t')).join('\n');
+$('#btnExample').onclick=()=>{
+  pushUndo(); data=makeData(Math.max(nv,DEFAULT_NV)); nv=data.length-1;
+  const rows=parseTSV(EXAMPLE); rows.forEach((r,i)=>r.forEach((v,j)=>{ data[i][j]=v; }));
+  gsel={ar:0,ac:0,fr:0,fc:0}; buildGrid(); markStale(); implement(true);
+  setMsg('가상의 예시 데이터예요. 엑셀 표를 A1 칸에 붙여넣으면 바뀝니다.'); focusEditor();
+};
+
+/* =====================================================================
+   4. 옵션
+   ===================================================================== */
+const opt={metric:'abs',scale:1,contrast:0.8,back:0.9,node:'rect',apa:true,thick:true,dashed:true,minR:0,N:null,hideNS:false,
+  colorMode:'sign',posColor:'#2563a8',negColor:'#d4561f',fadeR:true,fadeNS:true,widthK:1,topK:0,
+  labelMode:'strong',labelMin:0.3,labelStyle:'box',labelSize:12,labelPos:0.5,nodeFs:15,nodeColor:'set',hover:false,view:'map'};
+
+/* =====================================================================
+   5. 배치 — 한 번 계산해서 고정
+      ① 상관 → 목표 거리  (거리 대비 슬라이더로 차이를 증폭)
+      ② 고전적 MDS(초기) → 스프링 이완(Kamada–Kawai형 가중치 + 겹침 방지)을 '미리' 수렴
+      ③ 주축을 캔버스 긴 방향에 맞춰 정렬 → 중앙에 맞춤. 이후에는 움직이지 않음
+   ===================================================================== */
+const svg=$('#svg'), board=$('#board'), gEdges=$('#gEdges'), gLabels=$('#gLabels'), gNodes=$('#gNodes'), gTop=$('#gTop');
+svg.setAttribute('font-family',FONT);
+let W=800,H=600, G=null, focusNode=null, hoverNode=null, viewNode=null, drag=null, boardOp=1;
+const mctx=document.createElement('canvas').getContext('2d');
+function measure(t,size,weight=400){ mctx.font=`${weight} ${size}px ${FONT}`; return mctx.measureText(t).width; }
+const PAD=10;
+const MT=62, MB=56;   // 위(도구 버튼)·아래(안내 문구) 여백
+
+function mdsInit(L){
+  const n=L.length;
+  const B=Array.from({length:n},()=>new Array(n).fill(0));
+  const rm=new Array(n).fill(0); let gm=0;
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++){ const v=L[i][j]*L[i][j]; B[i][j]=v; rm[i]+=v/n; gm+=v/(n*n); }
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++) B[i][j]=-0.5*(B[i][j]-rm[i]-rm[j]+gm);
+  let shift=0; for(let i=0;i<n;i++){ let s=0; for(let j=0;j<n;j++) s+=Math.abs(B[i][j]); shift=Math.max(shift,s); }
+  const out=Array.from({length:n},()=>[0,0]); const vecs=[];
+  const ortho=v=>{ for(const u of vecs){ let d=0; for(let i=0;i<n;i++) d+=v[i]*u[i]; for(let i=0;i<n;i++) v[i]-=d*u[i]; } };
+  for(let k=0;k<2;k++){
+    const v=Array.from({length:n},(_,i)=>Math.sin(1.7*(i+1)+2.3*k)+0.3);   // 결정적 시작값
+    for(let it=0;it<400;it++){
+      ortho(v);
+      const w=new Array(n).fill(0);
+      for(let i=0;i<n;i++){ let s=shift*v[i]; for(let j=0;j<n;j++) s+=B[i][j]*v[j]; w[i]=s; }
+      let nr=0; for(let i=0;i<n;i++) nr+=w[i]*w[i]; nr=Math.sqrt(nr);
+      if(nr<1e-12) break;
+      for(let i=0;i<n;i++) v[i]=w[i]/nr;
+    }
+    ortho(v);
+    let nr=0; for(let i=0;i<n;i++) nr+=v[i]*v[i]; nr=Math.sqrt(nr)||1; for(let i=0;i<n;i++) v[i]/=nr;
+    let lam=0; for(let i=0;i<n;i++){ let s=0; for(let j=0;j<n;j++) s+=B[i][j]*v[j]; lam+=v[i]*s; }
+    vecs.push(v);
+    const sc=Math.sqrt(Math.max(lam,0));
+    for(let i=0;i<n;i++) out[i][k]=v[i]*sc;
+  }
+  return out;
+}
+function wrapName(s){
+  const MAXW=150, f=t=>measure(t,opt.nodeFs,500);
+  if(f(s)<=MAXW) return [s];
+  const words=s.split(/\s+/); if(words.length<2) return [s];
+  let best=null;
+  for(let i=1;i<words.length;i++){
+    const l=[words.slice(0,i).join(' '),words.slice(i).join(' ')], w=Math.max(...l.map(f));
+    if(!best||w<best.w) best={w,l};
+  }
+  if(best.w<=MAXW*1.4||words.length<3) return best.l;
+  let b3=null;
+  for(let i=1;i<words.length-1;i++)for(let j=i+1;j<words.length;j++){
+    const l=[words.slice(0,i).join(' '),words.slice(i,j).join(' '),words.slice(j).join(' ')], w=Math.max(...l.map(f));
+    if(!b3||w<b3.w) b3={w,l};
+  }
+  return b3.w<best.w?b3.l:best.l;
+}
+function refreshNodeLabel(nd){
+  const lines=wrapName(nd.name); nd.lines=lines.length;
+  nd.tw=Math.max(...lines.map(l=>measure(l,opt.nodeFs,500)));
+  nd.text.setAttribute('font-size',opt.nodeFs);
+  while(nd.text.firstChild) nd.text.removeChild(nd.text.firstChild);
+  nd.text.removeAttribute('dy');
+  lines.forEach((l,i)=>{
+    const t=document.createElementNS(SVGNS,'tspan'); t.setAttribute('x',0);
+    t.setAttribute('dy',i===0?(0.35-(lines.length-1)*0.55).toFixed(2)+'em':'1.1em'); t.textContent=l; nd.text.appendChild(t);
+  });
+}
+function sizeNode(nd){
+  const k=opt.nodeFs/15, extra=(nd.lines-1)*17*k;
+  if(nd.kind==='rect'){ nd.w=Math.max(56,nd.tw+30*k); nd.h=34*k+extra; }
+  else { nd.w=Math.max(70,nd.tw*1.22+34*k+(nd.lines>1?12:0)); nd.h=40*k+extra*1.2; }
+}
+function nodeFill(nd){
+  if(opt.nodeColor==='white'||!G||G.mode!=='rect') return '#fff';
+  return G.sets[nd.i]==='row' ? '#e3f1e8' : '#ece6f5';
+}
+function applyShape(nd){
+  const want=nd.kind==='rect'?'rect':'ellipse';
+  if(!nd.shape || nd.shape.localName!==want){
+    const s=document.createElementNS(SVGNS,want); s.setAttribute('class','shape');
+    if(nd.shape) nd.g.replaceChild(s,nd.shape); else nd.g.insertBefore(s,nd.text);
+    nd.shape=s;
+  }
+  const s=nd.shape;
+  s.setAttribute('fill',nodeFill(nd)); s.setAttribute('stroke','#111'); s.setAttribute('stroke-width',viewNode===nd.i?3:1.6);
+  if(want==='rect'){ s.setAttribute('x',-nd.w/2); s.setAttribute('y',-nd.h/2); s.setAttribute('width',nd.w); s.setAttribute('height',nd.h); s.setAttribute('rx',3); }
+  else { s.setAttribute('cx',0); s.setAttribute('cy',0); s.setAttribute('rx',nd.w/2); s.setAttribute('ry',nd.h/2); }
+}
+function sizeAll(){
+  for(const nd of G.nodes){
+    nd.kind = opt.node;
+    sizeNode(nd); applyShape(nd);
+  }
+}
+
+function updateTargets(){
+  const n=G.n, edges=G.edges, aux=G.aux||[]; if(n<2) return;
+  const avgW=G.nodes.reduce((s,d)=>s+d.w,0)/n;
+  const Lmin=avgW*0.75+14;
+  const span=opt.scale*Math.min(W,H)*0.85*(1+0.02*Math.max(0,n-5));
+  const d0=e=>opt.metric==='abs' ? 1-Math.abs(e.r) : (1-e.r)/2;
+  const known=edges.filter(e=>!e.missing).map(d0);
+  const mn=known.length?Math.min(...known):0, mx=known.length?Math.max(...known):1;
+  const mean=known.length?known.reduce((a,b)=>a+b,0)/known.length:0.5;
+  let sum=0;
+  for(const e of edges){
+    const base=e.missing?mean:d0(e);
+    const norm=mx>mn+1e-9?(base-mn)/(mx-mn):0.5;
+    e.L=Lmin+clamp(base+(norm-base)*opt.contrast,0,1)*span; sum+=e.L;      // 대비 슬라이더: 실제 값 ↔ 범위 늘림 사이 보간
+  }
+  if(aux.length){                                  // 직사각 표: 같은 쪽 변인끼리는 '상관 패턴 유사도'로 약하게 추정
+    const bs=aux.map(x=>(1-x.s)/2), m1=Math.min(...bs), m2=Math.max(...bs);
+    aux.forEach((x,i)=>{ const base=bs[i], norm=m2>m1+1e-9?(base-m1)/(m2-m1):0.5;
+      x.L=Lmin+clamp(base+(norm-base)*opt.contrast,0,1)*span*0.9; sum+=x.L; });
+  }
+  G.sim=edges.concat(aux);
+  const Lref=sum/G.sim.length;
+  for(const e of edges) e.k=0.3*clamp((Lref/e.L)**2,0.3,2.2)/(n-1);
+  for(const x of aux) x.k=0.08*clamp((Lref/x.L)**2,0.3,2.2)/(n-1);
+}
+function relax(){
+  const nodes=G.nodes, n=nodes.length;
+  for(let it=0;it<1500;it++){
+    for(const nd of nodes){ nd.ax=0; nd.ay=0; }
+    for(const e of G.sim){
+      const a=nodes[e.a], b=nodes[e.b];
+      let dx=b.x-a.x, dy=b.y-a.y, dist=Math.hypot(dx,dy);
+      if(dist<0.01){ dx=((e.a*7+e.b*13)%5-2)*0.1+0.05; dy=((e.a*11+e.b*3)%5-2)*0.1+0.07; dist=Math.hypot(dx,dy); }
+      const ux=dx/dist, uy=dy/dist, f=e.k*(dist-e.L);
+      a.ax+=f*ux; a.ay+=f*uy; b.ax-=f*ux; b.ay-=f*uy;
+      const A=(a.w+b.w)/2+PAD, Bv=(a.h+b.h)/2+PAD, q=Math.hypot(dx/A,dy/Bv);
+      if(q<1){ const push=(1-q)*0.3*Math.min(A,Bv); a.ax-=push*ux; a.ay-=push*uy; b.ax+=push*ux; b.ay+=push*uy; }
+    }
+    let cx=0,cy=0; for(const nd of nodes){ cx+=nd.x; cy+=nd.y; } cx/=n; cy/=n;
+    const gx=(W/2-cx)*0.02, gy=((MT+H-MB)/2-cy)*0.02; let ke=0;
+    for(const nd of nodes){
+      nd.vx=(nd.vx+nd.ax+gx)*0.8; nd.vy=(nd.vy+nd.ay+gy)*0.8;
+      nd.x+=nd.vx; nd.y+=nd.vy;
+      const mx=nd.w/2+14, my=nd.h/2+8;
+      if(nd.x<mx){ nd.x=mx; nd.vx=0; } else if(nd.x>W-mx){ nd.x=W-mx; nd.vx=0; }
+      if(nd.y<MT+my){ nd.y=MT+my; nd.vy=0; } else if(nd.y>H-MB-my){ nd.y=H-MB-my; nd.vy=0; }
+      ke+=Math.hypot(nd.vx,nd.vy);
+    }
+    if(it>60 && ke/n<0.01) break;
+  }
+}
+// 겹친 노드를 축 방향으로 밀어 떼어 놓는다 (결정적)
+function separate(){
+  const nodes=G.nodes, n=nodes.length;
+  for(let it=0;it<500;it++){
+    let moved=false;
+    for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){
+      const a=nodes[i], b=nodes[j];
+      const A=(a.w+b.w)/2+8, B=(a.h+b.h)/2+6;
+      const dx=b.x-a.x, dy=b.y-a.y, ox=A-Math.abs(dx), oy=B-Math.abs(dy);
+      if(ox>0&&oy>0){
+        moved=true;
+        if(ox<oy){ const sg=dx>0?1:dx<0?-1:((i+j)%2?-1:1); a.x-=sg*ox*0.51; b.x+=sg*ox*0.51; }
+        else{ const sg=dy>0?1:dy<0?-1:((i+j)%2?-1:1); a.y-=sg*oy*0.51; b.y+=sg*oy*0.51; }
+      }
+    }
+    for(const nd of nodes){
+      const mx=nd.w/2+10, my=nd.h/2+6;
+      nd.x=clamp(nd.x,mx,W-mx); nd.y=clamp(nd.y,MT+my,H-MB-my);
+    }
+    if(!moved) break;
+  }
+}
+const centroid=P=>{ let x=0,y=0; for(const p of P){ x+=p.x; y+=p.y; } return {x:x/P.length,y:y/P.length}; };
+// P를 g 중심으로 delta만큼 돌린 뒤, 캔버스 안에 들어오도록 (필요하면 축소) 중앙에 맞추는 변환
+function fitTransform(P,delta,g,sCap){
+  const cos=Math.cos(delta), sin=Math.sin(delta);
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  for(const p of P){
+    const qx=(p.x-g.x)*cos-(p.y-g.y)*sin, qy=(p.x-g.x)*sin+(p.y-g.y)*cos;
+    x0=Math.min(x0,qx); x1=Math.max(x1,qx); y0=Math.min(y0,qy); y1=Math.max(y1,qy);
+  }
+  const wmax=Math.max(...G.nodes.map(n=>n.w)), hmax=Math.max(...G.nodes.map(n=>n.h));
+  const m=18, aw=W-2*m-wmax, ah=H-MT-MB-hmax;
+  let s=sCap;
+  if(x1-x0>1) s=Math.min(s,aw/(x1-x0));
+  if(y1-y0>1) s=Math.min(s,ah/(y1-y0));
+  s=Math.max(s,0.15);
+  return {s, Gx:W/2-s*(x0+x1)/2, Gy:(MT+H-MB)/2-s*(y0+y1)/2};
+}
+function placeBy(P,g,delta,t){          // t: {s,Gx,Gy}
+  const cos=Math.cos(delta), sin=Math.sin(delta);
+  G.nodes.forEach((nd,i)=>{
+    const qx=P[i].x-g.x, qy=P[i].y-g.y;
+    nd.x=t.Gx+t.s*(qx*cos-qy*sin); nd.y=t.Gy+t.s*(qx*sin+qy*cos);
+  });
+}
+function layoutMap(){
+  const n=G.n, nodes=G.nodes;
+  const D=Array.from({length:n},()=>new Array(n).fill(0));
+  for(const e of G.sim){ D[e.a][e.b]=D[e.b][e.a]=e.L; }
+  const c=mdsInit(D);
+  nodes.forEach((nd,i)=>{ nd.x=W/2+c[i][0]+((i*37)%7-3)*0.7; nd.y=H/2+c[i][1]+((i*53)%7-3)*0.7; nd.vx=nd.vy=0; });
+  relax();
+  const P=nodes.map(d=>({x:d.x,y:d.y})), g=centroid(P);
+  let sxx=0,syy=0,sxy=0; for(const p of P){ const x=p.x-g.x,y=p.y-g.y; sxx+=x*x; syy+=y*y; sxy+=x*y; }
+  let delta=-0.5*Math.atan2(2*sxy,sxx-syy);            // 주축 → 가로
+  if(H>W) delta+=Math.PI/2;                            // 세로가 더 긴 화면이면 세로로
+  const t=fitTransform(P,delta,g,1);
+  placeBy(P,g,delta,t);
+}
+// 양분 배치: 행 변인은 왼쪽, 열 변인은 오른쪽 세로줄. 선 교차가 적도록 무게중심 정렬
+function layoutBipartite(){
+  const nodes=G.nodes, p=G.sets.filter(x=>x==='row').length, q=G.n-p;
+  const w=Array.from({length:G.n},()=>[]);
+  for(const e of G.edges){ if(e.missing) continue; const a=Math.abs(e.r)**2+1e-6; w[e.a].push([e.b,a]); w[e.b].push([e.a,a]); }
+  let ro=[...Array(p).keys()], co=[...Array(q).keys()].map(j=>p+j);
+  const pos=new Array(G.n);
+  const setPos=ord=>ord.forEach((id,k)=>{ pos[id]=ord.length>1?k/(ord.length-1):0.5; });
+  const sortBy=ord=>ord.map(id=>{ let sm=0,t=0; for(const [o,a] of w[id]){ sm+=a*pos[o]; t+=a; } return [t>0?sm/t:pos[id],id]; })
+    .sort((x,y)=>x[0]-y[0]||x[1]-y[1]).map(x=>x[1]);
+  setPos(ro); setPos(co);
+  for(let it=0;it<30;it++){ co=sortBy(co); setPos(co); ro=sortBy(ro); setPos(ro); }
+  const wr=Math.max(...ro.map(i=>nodes[i].w)), wc=Math.max(...co.map(i=>nodes[i].w));
+  const xL=Math.max(wr/2+24,W*0.2), xR=W-Math.max(wc/2+24,W*0.2);
+  const put=(ord,x)=>{ const top=MT+8, step=(H-MB-8-top)/ord.length; ord.forEach((id,k)=>{ nodes[id].x=x; nodes[id].y=top+step*(k+0.5); }); };
+  put(ro,xL); put(co,xR);
+}
+// 원형 배치: 거리 지도에서의 각도 순서를 유지한 채 타원 위에 균등 배치
+function layoutCircle(){
+  const nodes=G.nodes, g=centroid(nodes);
+  const order=nodes.map((nd,i)=>[Math.atan2(nd.y-g.y,nd.x-g.x),i]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);
+  const wmax=Math.max(...nodes.map(n=>n.w)), hmax=Math.max(...nodes.map(n=>n.h));
+  const rx=(W-36-wmax)/2, ry=(H-MT-MB-hmax)/2, cx=W/2, cy=(MT+H-MB)/2;
+  order.forEach((id,k)=>{ const a=-Math.PI/2+2*Math.PI*k/order.length; nodes[id].x=cx+rx*Math.cos(a); nodes[id].y=cy+ry*Math.sin(a); });
+}
+function layoutSolve(){
+  if(opt.view==='bipartite' && G.mode==='rect') layoutBipartite();
+  else{ layoutMap(); if(opt.view==='circle' && G.mode==='square') layoutCircle(); }
+  separate(); G.rs=1; updateFit();
+}
+
+/* ---- 애니메이션 엔진 (필요할 때만 돈다) ---- */
+let raf=0, anims=[], rr=0;
+const easeInOut=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+const easeBack=(t,c1)=>{ const u=t-1; return 1+(c1+1)*u*u*u+c1*u*u; };
+function addAnim(dur,fn,end){ anims.push({t0:performance.now(),dur,fn,end}); if(!raf) raf=requestAnimationFrame(frame); }
+function finishAnims(){ const a=anims; anims=[]; for(const x of a){ x.fn(1); x.end&&x.end(); } }
+function frame(now){
+  raf=0; const keep=[];
+  for(const a of anims){ const t=clamp((now-a.t0)/a.dur,0,1); a.fn(t); if(t<1) keep.push(a); else a.end&&a.end(); }
+  anims=keep; render();
+  if(anims.length) raf=requestAnimationFrame(frame);
+}
+function requestRender(){ if(rr||raf) return; rr=requestAnimationFrame(()=>{ rr=0; render(); }); }
+
+function playIntro(){
+  finishAnims();
+  const T=G.nodes.map(n=>({x:n.x,y:n.y})), C={x:W/2,y:H/2};
+  const from=T.map(p=>({x:C.x+(p.x-C.x)*0.12,y:C.y+(p.y-C.y)*0.12}));
+  const set=t=>{
+    const e=easeBack(t,opt.back);
+    G.nodes.forEach((nd,i)=>{ nd.x=from[i].x+(T[i].x-from[i].x)*e; nd.y=from[i].y+(T[i].y-from[i].y)*e; nd.s=clamp(0.6+0.4*e,0.6,1.04); });
+    boardOp=Math.min(1,t*4);
+  };
+  set(0);
+  addAnim(700,set,()=>{ G.nodes.forEach((nd,i)=>{ nd.x=T[i].x; nd.y=T[i].y; nd.s=1; }); boardOp=1; });
+}
+function morphTo(T,dur){
+  const from=G.nodes.map(n=>({x:n.x,y:n.y}));
+  const set=t=>{ const e=easeInOut(t); G.nodes.forEach((nd,i)=>{ nd.x=from[i].x+(T[i].x-from[i].x)*e; nd.y=from[i].y+(T[i].y-from[i].y)*e; }); };
+  addAnim(dur,set,()=>{ G.nodes.forEach((nd,i)=>{ nd.x=T[i].x; nd.y=T[i].y; }); });
+}
+function popNode(nd){
+  addAnim(240,t=>{ nd.s=1+0.07*Math.sin(Math.PI*t); },()=>{ nd.s=1; });
+}
+// 배경 드래그 회전: 누른 시점의 배치를 기준으로 무게중심 둘레를 연속 회전, 놓으면 화면 안에 맞춰 부드럽게 정리
+function finishRotate(P,g,delta){
+  const t=fitTransform(P,delta,g,1/G.rs);
+  G.rs*=t.s;
+  const from=G.nodes.map(n=>({x:n.x,y:n.y}));
+  const T=(()=>{ placeBy(P,g,delta,t); const r=G.nodes.map(n=>({x:n.x,y:n.y})); G.nodes.forEach((n,i)=>{ n.x=from[i].x; n.y=from[i].y; }); return r; })();
+  morphTo(T,260);
+}
+function relayout(animate){
+  if(!G) return; finishAnims();
+  const before=G.nodes.map(n=>({x:n.x,y:n.y}));
+  updateTargets(); layoutSolve();
+  const T=G.nodes.map(n=>({x:n.x,y:n.y}));
+  if(animate){ G.nodes.forEach((nd,i)=>{ nd.x=before[i].x; nd.y=before[i].y; }); morphTo(T,450); }
+  render();
+}
+
+/* ---- 렌더 ---- */
+function edgeT(nd,ux,uy){
+  const rx=nd.w/2, ry=nd.h/2;
+  if(nd.kind==='rect') return Math.min(rx/(Math.abs(ux)||1e-9), ry/(Math.abs(uy)||1e-9));
+  return 1/Math.sqrt((ux/rx)**2+(uy/ry)**2);
+}
+function labelOn(e){
+  if(opt.labelMode==='none') return false;
+  if(viewNode!=null && (e.a===viewNode||e.b===viewNode)) return true;
+  if(opt.labelMode==='all') return true;
+  if(opt.labelMode==='strong') return Math.abs(e.r)>=opt.labelMin-1e-9;
+  return false;
+}
+function setVis(e,v){
+  if(e.vis===v) return; e.vis=v;
+  e.line.setAttribute('display',v?'inline':'none');
+  e.lg.setAttribute('display',(v&&labelOn(e))?'inline':'none');
+}
+function render(){
+  if(!G) return;
+  board.setAttribute('opacity',boardOp.toFixed(3));
+  for(const nd of G.nodes) nd.g.setAttribute('transform',`translate(${nd.x.toFixed(1)} ${nd.y.toFixed(1)}) scale(${nd.s.toFixed(3)})`);
+  for(const e of G.edges){
+    if(!e.shown){ setVis(e,false); continue; }
+    const a=G.nodes[e.a], b=G.nodes[e.b];
+    const dx=b.x-a.x, dy=b.y-a.y, dist=Math.hypot(dx,dy)||1e-6, ux=dx/dist, uy=dy/dist;
+    const ta=edgeT(a,ux,uy)+1.5, tb=edgeT(b,ux,uy)+1.5, len=dist-ta-tb;
+    if(len<12){ setVis(e,false); continue; }
+    setVis(e,true);
+    const x1=a.x+ux*ta, y1=a.y+uy*ta, x2=b.x-ux*tb, y2=b.y-uy*tb;
+    e.line.setAttribute('x1',x1.toFixed(1)); e.line.setAttribute('y1',y1.toFixed(1));
+    e.line.setAttribute('x2',x2.toFixed(1)); e.line.setAttribute('y2',y2.toFixed(1));
+    const lt=opt.labelPos;
+    e.lg.setAttribute('transform',`translate(${(x1+(x2-x1)*lt).toFixed(1)} ${(y1+(y2-y1)*lt).toFixed(1)})`);
+  }
+}
+
+/* ---- 그래프 구성 ---- */
+function mk(tag,attrs={}){ const el=document.createElementNS(SVGNS,tag); for(const k in attrs) el.setAttribute(k,attrs[k]); return el; }
+let errCells=[];
+function markErr(r,c){ const td=cellEls[r]&&cellEls[r][c]; if(td){ td.classList.add('err'); errCells.push(td); } }
+const starsOf=raw=>((String(raw).match(/\*+\s*$/)||[''])[0]).trim();
+function pearson(x,y){
+  const n=x.length; let mx=0,my=0; for(let i=0;i<n;i++){ mx+=x[i]; my+=y[i]; } mx/=n; my/=n;
+  let sxx=0,syy=0,sxy=0; for(let i=0;i<n;i++){ const a=x[i]-mx,b=y[i]-my; sxx+=a*a; syy+=b*b; sxy+=a*b; }
+  return sxx>1e-12&&syy>1e-12 ? sxy/Math.sqrt(sxx*syy) : 0;
+}
+function ranks(a){
+  const idx=a.map((v,i)=>[v,i]).sort((x,y)=>x[0]-y[0]), r=new Array(a.length); let i=0;
+  while(i<idx.length){ let j=i; while(j+1<idx.length&&idx[j+1][0]===idx[i][0]) j++;
+    const avg=(i+j)/2+1; for(let k=i;k<=j;k++) r[idx[k][1]]=avg; i=j+1; }
+  return r;
+}
+function updateFit(){
+  const el=$('#fit'); if(!G||opt.view!=='map'){ el.style.display='none'; return; }
+  const es=G.edges.filter(e=>!e.missing); if(es.length<3){ el.style.display='none'; return; }
+  const xs=es.map(e=>opt.metric==='abs'?Math.abs(e.r):e.r);
+  const ys=es.map(e=>Math.hypot(G.nodes[e.a].x-G.nodes[e.b].x,G.nodes[e.a].y-G.nodes[e.b].y));
+  const rho=pearson(ranks(xs),ranks(ys));
+  el.textContent='거리 적합도 ρ = '+(rho<0?'−':'')+Math.abs(rho).toFixed(2).replace(/^0/,'');
+  el.title='상관(또는 |r|)과 화면 거리의 순위상관(Spearman). −1에 가까울수록 상관이 클수록 가깝게 배치된 것입니다. 2차원 배치는 근사이므로 논문에는 이 값과 함께 설명하세요.';
+  el.style.display='block';
+}
+function layoutMode(){
+  const m=$('#oMode').value; if(m!=='auto') return m;
+  for(let k=1;k<=nv;k++){ const rn=cleanName(data[k][0]), cn=isNumHdr(data[0][k])?'':cleanName(data[0][k]); if(rn&&cn&&rn!==cn) return 'rect'; }
+  return 'square';
+}
+function collect(){
+  errCells.forEach(td=>td.classList.remove('err')); errCells=[];
+  return layoutMode()==='rect' ? collectRect() : collectSquare();
+}
+function collectSquare(){
+  const ks=[]; for(let k=1;k<=nv;k++){ if(nameOf(k)) ks.push(k); }
+  if(ks.length<2) return {error:'변인명이 입력된 행·열이 2개 이상 필요해요. (A열과 1행에 변인명을 넣어 주세요)'};
+  const n=ks.length, pairs=[]; let missing=0;
+  for(let a=0;a<n;a++)for(let b=0;b<a;b++){
+    const i=ks[a], j=ks[b];                               // 행 i, 열 j (i>j): 하삼각 우선
+    const lo=classify(data[i][j]), up=classify(data[j][i]), nm=`${nameOf(i)} × ${nameOf(j)}`;
+    let c=null, raw=null;
+    if(lo.type==='num'){ c=lo; raw=data[i][j]; } else if(up.type==='num'){ c=up; raw=data[j][i]; }
+    else if(lo.type==='text'){ markErr(i,j); markErr(j,i); return {error:`숫자가 아닌 값이 있어요 (${nm}: “${lo.s}”)`}; }
+    else if(up.type==='text'){ markErr(i,j); markErr(j,i); return {error:`숫자가 아닌 값이 있어요 (${nm}: “${up.s}”)`}; }
+    if(c){
+      if(Math.abs(c.v)>1+1e-9){ markErr(i,j); markErr(j,i); return {error:`상관계수는 −1~1 사이여야 해요 (${nm}: ${c.s})`}; }
+      pairs.push({a:b,b:a,r:c.v,missing:false,stars:starsOf(raw)});
+    }else{ pairs.push({a:b,b:a,r:0,missing:true,stars:''}); missing++; }
+  }
+  return {mode:'square',n,vkeys:ks,names:ks.map(nameOf),sets:null,pairs,missing};
+}
+function collectRect(){
+  const rks=[], cks=[];
+  for(let k=1;k<=nv;k++){ if(cleanName(data[k][0])) rks.push(k); if(cleanName(data[0][k])) cks.push(k); }
+  if(!rks.length||!cks.length) return {error:'행 변인명(A열)과 열 변인명(1행)을 각각 1개 이상 입력해 주세요.'};
+  const p=rks.length, q=cks.length, pairs=[]; let missing=0;
+  const X=Array.from({length:p},()=>new Array(q).fill(0));
+  for(let ri=0;ri<p;ri++)for(let ci=0;ci<q;ci++){
+    const r=rks[ri], c=cks[ci], raw=data[r][c], cl=classify(raw);
+    const nm=`${cleanName(data[r][0])} × ${cleanName(data[0][c])}`;
+    if(cl.type==='text'){ markErr(r,c); return {error:`숫자가 아닌 값이 있어요 (${nm}: “${cl.s}”)`}; }
+    if(cl.type==='num'){
+      if(Math.abs(cl.v)>1+1e-9){ markErr(r,c); return {error:`상관계수는 −1~1 사이여야 해요 (${nm}: ${cl.s})`}; }
+      X[ri][ci]=cl.v; pairs.push({a:ri,b:p+ci,r:cl.v,missing:false,stars:starsOf(raw)});
+    }else{ pairs.push({a:ri,b:p+ci,r:0,missing:true,stars:''}); missing++; }
+  }
+  return {mode:'rect',n:p+q,p,q,X,
+    vkeys:[...rks.map(k=>'r'+k),...cks.map(k=>'c'+k)],
+    names:[...rks.map(k=>cleanName(data[k][0])),...cks.map(k=>cleanName(data[0][k]))],
+    sets:[...Array(p).fill('row'),...Array(q).fill('col')], pairs, missing};
+}
+let pendingSave=null;
+function clearCanvas(){
+  finishAnims();
+  gEdges.innerHTML=gLabels.innerHTML=gNodes.innerHTML=gTop.innerHTML='';
+  G=null; focusNode=null; hoverNode=null; viewNode=null; drag=null;
+  $('#empty').style.display=''; $('#fit').style.display='none'; $('#legendRect').style.display='none';
+}
+function implement(noHistory){
+  if(editing) commitEdit();
+  const res=collect();
+  if(res.error){ setMsg(res.error,'err'); return; }
+  if(!noHistory) pushUndo();
+  buildGraph(res); markDirty(false);
+  let m = res.mode==='rect' ? `직사각 표로 인식했어요 — 행 변인 ${res.p}개 × 열 변인 ${res.q}개.`
+        : `${res.n}개 변인을 배치했어요.`+((nv-res.n)>0?` (이름이 빈 ${nv-res.n}개 칸은 무시)`:'');
+  if(res.missing) m+=` 빈 상관 ${res.missing}개는 선을 숨겼어요.`;
+  setMsg(m,'ok');
+}
+function buildGraph(res,place){
+  finishAnims();
+  gEdges.innerHTML=gLabels.innerHTML=gNodes.innerHTML=gTop.innerHTML='';
+  focusNode=null; hoverNode=null; viewNode=null; drag=null;
+  G={n:res.n,mode:res.mode,sets:res.sets,res,nodes:[],edges:[],aux:[],sim:[],stale:false,rs:1};
+  { const sel=$('#oView');
+    [...sel.options].forEach(o=>{ o.disabled=(o.value==='bipartite'&&res.mode!=='rect')||(o.value==='circle'&&res.mode!=='square'); });
+    if(res.mode==='rect' && !opt.viewTouched && opt.view==='map'){ opt.view='bipartite'; sel.value='bipartite'; opt.labelPos=0.7; writeCtl(ctl('oLabelPos'),0.7); }
+    if(sel.selectedOptions[0].disabled){ opt.view='map'; sel.value='map'; } }
+  for(let i=0;i<res.n;i++){
+    const g=mk('g',{class:'node'}); g.dataset.i=i;
+    const text=mk('text',{'text-anchor':'middle','font-size':opt.nodeFs,'font-weight':500,fill:'#111'});
+    g.appendChild(text); gNodes.appendChild(g);
+    const nd={i,v:res.vkeys[i],name:res.names[i],kind:'ellipse',lines:1,tw:50,x:W/2,y:H/2,vx:0,vy:0,ax:0,ay:0,w:70,h:40,s:1,g,text,shape:null};
+    refreshNodeLabel(nd); G.nodes.push(nd);
+  }
+  for(const pr of res.pairs){
+    const line=mk('line',{stroke:'#111','stroke-linecap':'round'});
+    const lg=mk('g'); const rect=mk('rect',{y:-9,height:18,rx:3,fill:'#fff','fill-opacity':.93});
+    const t=mk('text',{'text-anchor':'middle',dy:'.35em','font-size':opt.labelSize,fill:'#111'});
+    lg.appendChild(rect); lg.appendChild(t); gEdges.appendChild(line); gLabels.appendChild(lg);
+    G.edges.push({a:pr.a,b:pr.b,r:pr.r,missing:pr.missing,stars:pr.stars,line,lg,rect,text:t,L:200,k:.01,shown:true,vis:null,p:NaN});
+  }
+  if(res.mode==='rect'){
+    const {p,q,X}=res;
+    for(let i=0;i<p;i++)for(let j=i+1;j<p;j++) G.aux.push({a:i,b:j,s:pearson(X[i],X[j]),L:200,k:.01});
+    const col=j=>X.map(r=>r[j]);
+    for(let i=0;i<q;i++)for(let j=i+1;j<q;j++) G.aux.push({a:p+i,b:p+j,s:pearson(col(i),col(j)),L:200,k:.01});
+  }
+  sizeAll(); updateTargets(); refreshEdgeStyles(); layoutSolve();
+  $('#empty').style.display='none';
+  $('#legendRect').style.display=res.mode==='rect'?'inline':'none';
+  if(pendingSave){
+    const ps=pendingSave; pendingSave=null;
+    if(ps.canvas&&Array.isArray(ps.canvas.nodes)){
+      const byKey=new Map(), cnt=new Map(), byName=new Map();
+      for(const q of ps.canvas.nodes){ if(q.key!=null) byKey.set(String(q.key),q); cnt.set(q.name,(cnt.get(q.name)||0)+1); byName.set(q.name,q); }
+      for(const nd of G.nodes){
+        let q=byKey.get(String(nd.v));
+        if(!q && cnt.get(nd.name)===1) q=byName.get(nd.name);      // 예전 파일(칸 정보 없음): 이름이 하나뿐일 때만
+        if(q&&isFinite(q.x)&&isFinite(q.y)){ nd.x=q.x*W; nd.y=q.y*H; }
+      }
+      if(isFinite(ps.canvas.rs)&&ps.canvas.rs>0) G.rs=ps.canvas.rs;
+    }
+  }
+  if(place&&place.pos){ G.nodes.forEach((n,i)=>{ if(place.pos[i]){ n.x=place.pos[i][0]; n.y=place.pos[i][1]; } }); boardOp=1; render(); }
+  else playIntro();
+}
+function fmtR(r){
+  let s=Math.abs(r).toFixed(2);
+  if(opt.apa && s[0]==='0') s=s.slice(1);
+  const nz=Math.abs(r).toFixed(2)!=='0.00';
+  return (r<0&&nz?'−':'')+s;
+}
+function updateLegend(){
+  const sign=opt.colorMode==='sign', pc=sign?opt.posColor:'#111', nc=sign?opt.negColor:'#111';
+  $('#legendColor').innerHTML=`<b style="color:${pc}">━ 양(+)</b> <b style="color:${nc}">${opt.dashed?'┅':'━'} 음(−)</b> 상관 · 굵고 진할수록 강함`;
+  $('#legendNear').style.display=opt.view==='map'?'inline':'none';
+}
+function refreshEdgeStyles(){
+  if(!G) return;
+  const hasSrc=G.edges.some(e=>e.stars);
+  let keep=null;
+  if(opt.topK>0){                                   // 변인마다 |r|이 큰 선 K개만 (한쪽 끝이라도 해당되면 유지)
+    keep=new Set(); const by=Array.from({length:G.n},()=>[]);
+    G.edges.forEach((e,i)=>{ if(e.missing) return; by[e.a].push(i); by[e.b].push(i); });
+    by.forEach(list=>{ list.sort((x,y)=>Math.abs(G.edges[y].r)-Math.abs(G.edges[x].r)); list.slice(0,opt.topK).forEach(i=>keep.add(i)); });
+  }
+  const sign=opt.colorMode==='sign', fs=opt.labelSize, bh=fs+6;
+  G.edges.forEach((e,i)=>{
+    e.p=opt.N>2?pFromR(e.r,opt.N):NaN;
+    const star=opt.N>2?stars(e.p):(e.stars||'');
+    const txt=fmtR(e.r)+star, strong=Math.abs(e.r)>=0.5, col=sign?(e.r<0?opt.negColor:opt.posColor):'#111';
+    e.text.textContent=txt;
+    e.text.setAttribute('font-size',fs); e.text.setAttribute('fill',col); e.text.setAttribute('font-weight',strong?600:400);
+    const w=measure(txt,fs,strong?600:400)+10;
+    e.rect.setAttribute('x',-w/2); e.rect.setAttribute('width',w); e.rect.setAttribute('y',-bh/2); e.rect.setAttribute('height',bh);
+    if(opt.labelStyle==='halo'){
+      e.rect.setAttribute('fill-opacity',0);
+      e.text.setAttribute('stroke','#fff'); e.text.setAttribute('stroke-width',4); e.text.setAttribute('paint-order','stroke'); e.text.setAttribute('stroke-linejoin','round');
+    }else{
+      e.rect.setAttribute('fill-opacity',0.93);
+      ['stroke','stroke-width','paint-order','stroke-linejoin'].forEach(a=>e.text.removeAttribute(a));
+    }
+    e.line.setAttribute('stroke',col);
+    e.line.setAttribute('stroke-width',((opt.thick?(0.9+2.6*Math.abs(e.r)):1.4)*opt.widthK).toFixed(2));
+    if(opt.dashed&&e.r<0) e.line.setAttribute('stroke-dasharray','7 5'); else e.line.removeAttribute('stroke-dasharray');
+    const ns=opt.N>2?(e.p>=0.05):(hasSrc?!e.stars:false);
+    let op=1; if(opt.fadeR) op=clamp(0.18+0.82*Math.abs(e.r)/0.55,0.18,1); if(opt.fadeNS&&ns) op*=0.5;
+    e.op=op;
+    e.shown=!e.missing && Math.abs(e.r)>=opt.minR-1e-9 && !(opt.hideNS&&ns) && (!keep||keep.has(i));
+    e.vis=null;
+  });
+  updateLegend();
+  applyHighlight(); requestRender();
+}
+
+/* ---- 클릭: 연결선 강조 켜기/끄기 (옵션: 마우스 올리면 미리 강조) ---- */
+function setSel(i){ if(!G||focusNode===i) return; focusNode=i; refreshView(); }
+function refreshView(){
+  if(!G) return;
+  const v=focusNode!=null?focusNode:(opt.hover?hoverNode:null);
+  if(v!==viewNode){
+    if(viewNode!=null) for(const e of G.edges) if(e.a===viewNode||e.b===viewNode) gLabels.appendChild(e.lg);
+    viewNode=v;
+    if(v!=null) for(const e of G.edges) if(e.a===v||e.b===v) gTop.appendChild(e.lg);
+  }
+  applyHighlight(); requestRender();
+}
+function applyHighlight(){
+  if(!G) return;
+  const f=viewNode, nb=new Set();
+  if(f!=null){ nb.add(f); for(const e of G.edges) if(e.shown&&(e.a===f||e.b===f)){ nb.add(e.a); nb.add(e.b); } }
+  for(const e of G.edges){
+    const on=f==null||e.a===f||e.b===f;
+    e.line.setAttribute('opacity',f==null?e.op:(on?1:0.06)); e.lg.setAttribute('opacity',on?1:0);
+    e.vis=null;
+  }
+  for(const nd of G.nodes){ nd.g.setAttribute('opacity',(f==null||nb.has(nd.i))?1:0.3); applyShape(nd); }
+}
+gNodes.addEventListener('pointerover',e=>{ const g=e.target.closest('.node'); if(!g||!G) return; hoverNode=+g.dataset.i; if(opt.hover) refreshView(); });
+gNodes.addEventListener('pointerout',e=>{
+  const g=e.target.closest('.node'); if(!g) return;
+  const to=e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest('.node');
+  if(to!==g){ hoverNode=null; if(opt.hover) refreshView(); }
+});
+
+/* ---- 드래그: 잡은 변인 하나만, 놓은 자리에 그대로 ---- */
+const pt=e=>{ const r=svg.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; };
+gNodes.addEventListener('pointerdown',e=>{
+  const g=e.target.closest('.node'); if(!g||!G) return;
+  e.preventDefault(); finishAnims();
+  const nd=G.nodes[+g.dataset.i]; g.setPointerCapture(e.pointerId);
+  const p=pt(e); drag={nd,id:e.pointerId,ox:nd.x-p.x,oy:nd.y-p.y,sx:p.x,sy:p.y,moved:false};
+  g.style.cursor='grabbing';
+});
+gNodes.addEventListener('pointermove',e=>{
+  if(!drag||e.pointerId!==drag.id) return;
+  const p=pt(e), nd=drag.nd;
+  if(!drag.moved && Math.hypot(p.x-drag.sx,p.y-drag.sy)>3){ drag.moved=true; pushUndo(); }
+  if(!drag.moved) return;
+  nd.x=clamp(p.x+drag.ox,nd.w/2+6,W-nd.w/2-6); nd.y=clamp(p.y+drag.oy,nd.h/2+6,H-nd.h/2-6);
+  requestRender();
+});
+function endDrag(e){
+  if(!drag||e.pointerId!==drag.id) return;
+  const nd=drag.nd; nd.g.style.cursor='';
+  const moved=drag.moved;
+  if(!moved){ setSel(focusNode===nd.i?null:nd.i); popNode(nd); }
+  drag=null; render(); if(moved) updateFit();
+}
+gNodes.addEventListener('pointerup',endDrag);
+gNodes.addEventListener('pointercancel',endDrag);
+let spin=null;
+svg.addEventListener('pointerdown',e=>{
+  if(e.target.closest('.node')) return;
+  setSel(null);
+  if(!G||e.button!==0) return;
+  finishAnims();
+  const P=G.nodes.map(n=>({x:n.x,y:n.y})), g=centroid(P), p=pt(e);
+  spin={id:e.pointerId,P,g,a0:Math.atan2(p.y-g.y,p.x-g.x),phi:0,moved:false,sx:p.x,sy:p.y,last:0};
+  svg.setPointerCapture(e.pointerId); svg.style.cursor='grabbing';
+});
+svg.addEventListener('pointermove',e=>{
+  if(!spin||e.pointerId!==spin.id) return;
+  const p=pt(e);
+  if(!spin.moved){ if(Math.hypot(p.x-spin.sx,p.y-spin.sy)<=3) return; spin.moved=true; pushUndo(); spin.a0=Math.atan2(p.y-spin.g.y,p.x-spin.g.x); }
+  let d=Math.atan2(p.y-spin.g.y,p.x-spin.g.x)-spin.a0;
+  d=Math.atan2(Math.sin(d),Math.cos(d));              // -π~π 로 정규화해 끊김 없이 이어지게
+  let step=d-spin.last; step=Math.atan2(Math.sin(step),Math.cos(step));
+  spin.phi+=step; spin.last=d;
+  placeBy(spin.P,spin.g,spin.phi,{s:1,Gx:spin.g.x,Gy:spin.g.y});
+  requestRender();
+});
+function endSpin(e){
+  if(!spin||e.pointerId!==spin.id) return;
+  const sp=spin; spin=null; svg.style.cursor='';
+  if(sp.moved){ finishRotate(sp.P,sp.g,sp.phi); }
+}
+svg.addEventListener('pointerup',endSpin);
+svg.addEventListener('pointercancel',endSpin);
+
+/* ---- 크기 변화: 배치는 그대로 두고 가운데 기준으로만 평행이동 ---- */
+new ResizeObserver(()=>{
+  const r=$('#right').getBoundingClientRect(), nw=Math.max(300,r.width), nh=Math.max(300,r.height);
+  const dx=(nw-W)/2, dy=(nh-H)/2; W=nw; H=nh;
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  if(G){ finishAnims(); for(const nd of G.nodes){ nd.x=clamp(nd.x+dx,nd.w/2+6,W-nd.w/2-6); nd.y=clamp(nd.y+dy,nd.h/2+6,H-nd.h/2-6); } render(); }
+}).observe($('#right'));
+
+/* =====================================================================
+   6. 내보내기 (SVG / PNG) — 변인 영역만 잘라서 저장
+   ===================================================================== */
+function buildExport(){
+  if(!G) return null;
+  const keep=focusNode, kh=hoverNode; hoverNode=null; focusNode=null; refreshView(); finishAnims(); render();
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for(const nd of G.nodes){ x0=Math.min(x0,nd.x-nd.w/2); x1=Math.max(x1,nd.x+nd.w/2); y0=Math.min(y0,nd.y-nd.h/2); y1=Math.max(y1,nd.y+nd.h/2); }
+  const m=36; x0-=m; y0-=m; x1+=m; y1+=m;
+  const w=Math.ceil(x1-x0), h=Math.ceil(y1-y0);
+  const c=svg.cloneNode(true);
+  c.setAttribute('xmlns',SVGNS); c.removeAttribute('id'); c.removeAttribute('style');
+  c.setAttribute('viewBox',`${x0.toFixed(1)} ${y0.toFixed(1)} ${w} ${h}`);
+  c.setAttribute('width',w); c.setAttribute('height',h);
+  c.querySelector('#board').setAttribute('opacity',1);
+  c.querySelectorAll('.node').forEach(g=>{
+    g.setAttribute('transform',g.getAttribute('transform').replace(/scale\([^)]*\)/,'scale(1)'));
+    g.removeAttribute('class'); g.removeAttribute('style');
+  });
+  c.querySelectorAll('[pointer-events]').forEach(x=>x.removeAttribute('pointer-events'));
+  const bg=document.createElementNS(SVGNS,'rect');
+  bg.setAttribute('x',x0.toFixed(1)); bg.setAttribute('y',y0.toFixed(1)); bg.setAttribute('width',w); bg.setAttribute('height',h); bg.setAttribute('fill','#fff');
+  c.insertBefore(bg,c.firstChild);
+  const text='<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(c);
+  hoverNode=kh; focusNode=keep; refreshView();
+  return {text,w,h};
+}
+function download(blob,name){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+$('#btnSvg').onclick=()=>{
+  const ex=buildExport(); if(!ex){ setMsg('먼저 ‘구현’을 눌러 주세요.','err'); return; }
+  download(new Blob([ex.text],{type:'image/svg+xml;charset=utf-8'}),'상관지도.svg');
+};
+$('#btnPng').onclick=()=>{
+  const ex=buildExport(); if(!ex){ setMsg('먼저 ‘구현’을 눌러 주세요.','err'); return; }
+  const scale=Math.min(3,Math.sqrt(16e6/(ex.w*ex.h)));
+  const url=URL.createObjectURL(new Blob([ex.text],{type:'image/svg+xml;charset=utf-8'}));
+  const img=new Image();
+  img.onload=()=>{
+    const cv=document.createElement('canvas'); cv.width=Math.round(ex.w*scale); cv.height=Math.round(ex.h*scale);
+    const ctx=cv.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.drawImage(img,0,0,cv.width,cv.height); URL.revokeObjectURL(url);
+    cv.toBlob(b=>download(b,'상관지도.png'),'image/png');
+  };
+  img.onerror=()=>setMsg('PNG 변환에 실패했어요. SVG로 저장해 보세요.','err');
+  img.src=url;
+};
+$('#btnRespread').onclick=()=>{ if(!G) return; pushUndo(); finishAnims(); setSel(null); updateTargets(); layoutSolve(); playIntro(); };
+
+/* =====================================================================
+   7. 옵션 연결 & 시작
+   ===================================================================== */
+$('#oMode').onchange=e=>{ const v=e.target.value; e.target.value=lastMode; pushUndo(); e.target.value=v; syncQuick(); markDirty(true); markStale(); setMsg('표 형태를 바꿨어요. ‘구현’을 눌러 다시 배치하세요.'); };
+const pct={conv:v=>v/100,inv:v=>v*100}, num={conv:v=>+v,inv:v=>v};
+const CTRL=[
+  {id:'oMetric',key:'metric',t:'sel',fx:'lay-anim'},
+  {id:'oContrast',key:'contrast',t:'rng',...pct,show:v=>Math.round(v*100)+'%',fx:'lay'},
+  {id:'oScale',key:'scale',t:'rng',...pct,show:v=>Math.round(v*100)+'%',fx:'lay'},
+  {id:'oElastic',key:'back',t:'rng',conv:v=>v/100*1.8,inv:v=>v/1.8*100,show:v=>Math.round(v/1.8*100)+'%',fx:'none'},
+  {id:'oShape',key:'node',t:'sel',fx:'size-anim'},
+  {id:'oNodeColor',key:'nodeColor',t:'sel',fx:'style'},
+  {id:'oNodeFs',key:'nodeFs',t:'rng',...num,show:v=>v+'px',fx:'size'},
+  {id:'oHover',key:'hover',t:'chk',fx:'view'},
+  {id:'oColor',key:'colorMode',t:'sel',fx:'style'},
+  {id:'oPos',key:'posColor',t:'col',fx:'style'},
+  {id:'oNeg',key:'negColor',t:'col',fx:'style'},
+  {id:'oDash',key:'dashed',t:'chk',fx:'style'},
+  {id:'oThick',key:'thick',t:'chk',fx:'style'},
+  {id:'oWidth',key:'widthK',t:'rng',...pct,show:v=>v.toFixed(1)+'×',fx:'style'},
+  {id:'oFadeR',key:'fadeR',t:'chk',fx:'style'},
+  {id:'oFadeNS',key:'fadeNS',t:'chk',fx:'style'},
+  {id:'oMin',key:'minR',t:'rng',...pct,show:v=>v.toFixed(2),fx:'style'},
+  {id:'oTopK',key:'topK',t:'rng',...num,show:v=>v===0?'전체':v+'개',fx:'style'},
+  {id:'oHideNS',key:'hideNS',t:'chk',fx:'style'},
+  {id:'oLabelMode',key:'labelMode',t:'sel',fx:'style'},
+  {id:'oLabelMin',key:'labelMin',t:'rng',...pct,show:v=>v.toFixed(2),fx:'style'},
+  {id:'oLabelStyle',key:'labelStyle',t:'sel',fx:'style'},
+  {id:'oLabelSize',key:'labelSize',t:'rng',...num,show:v=>v+'px',fx:'style'},
+  {id:'oLabelPos',key:'labelPos',t:'rng',...pct,show:v=>Math.round(v*100)+'%',fx:'render'},
+  {id:'oApa',key:'apa',t:'chk',fx:'style'},
+];
+const ctl=id=>CTRL.find(c=>c.id===id);
+function showCtl(c){ const v=document.getElementById('v_'+c.id); if(v&&c.show) v.textContent=c.show(opt[c.key]); }
+function readCtl(c){
+  const el=document.getElementById(c.id);
+  return c.t==='chk'?el.checked : c.t==='rng'?c.conv(parseFloat(el.value)) : el.value;
+}
+function writeCtl(c,val){
+  const el=document.getElementById(c.id);
+  if(c.t==='chk') el.checked=!!val; else if(c.t==='rng') el.value=String(c.inv(val)); else el.value=val;
+  showCtl(c);
+}
+function sizeFonts(){ if(!G) return; G.nodes.forEach(refreshNodeLabel); sizeAll(); }
+let lastPreset='clear', lastMode='auto';
+function syncQuick(){
+  lastPreset=$('#oPreset').value; lastMode=$('#oMode').value;
+  for(const [a,b] of [['oPreset','oPreset2'],['oMode','oMode2'],['oMetric','oMetric2']]) $('#'+b).value=$('#'+a).value;
+}
+function applyFx(fx){
+  syncQuick();
+  switch(fx){
+    case 'style': refreshEdgeStyles(); break;
+    case 'lay': relayout(false); break;
+    case 'lay-anim': relayout(true); break;
+    case 'size': if(G){ finishAnims(); sizeFonts(); separate(); refreshEdgeStyles(); render(); } break;
+    case 'size-anim': if(G){ finishAnims(); sizeAll(); separate(); render(); } break;
+    case 'view': refreshView(); break;
+    case 'render': requestRender(); break;
+  }
+}
+for(const c of CTRL){
+  const el=document.getElementById(c.id), live=c.t==='rng'||c.t==='col';
+  if(live) el.addEventListener('change',()=>{ c.g=false; });      // 슬라이더 한 번 끌기 = 기록 1개
+  el.addEventListener(live?'input':'change',()=>{
+    if(!live||!c.g){ pushUndo(); c.g=live; }
+    opt[c.key]=readCtl(c); showCtl(c);
+    if(c.fx==='style'||c.fx==='render') $('#oPreset').value='custom';
+    applyFx(c.fx);
+  });
+}
+const PRESETS={
+  clear:{colorMode:'sign',fadeR:true,fadeNS:true,thick:true,widthK:1,dashed:true,minR:0,topK:0,hideNS:false,
+         labelMode:'strong',labelMin:0.3,labelStyle:'box',labelSize:12,nodeColor:'set',apa:true},
+  paper:{colorMode:'black',fadeR:false,fadeNS:false,thick:true,widthK:1,dashed:true,minR:0,topK:0,hideNS:false,
+         labelMode:'all',labelStyle:'box',labelSize:12,nodeColor:'white',apa:true}
+};
+PRESETS.core=Object.assign({},PRESETS.clear,{topK:3,labelMode:'all'});
+function applyPreset(name){
+  const P=PRESETS[name]; if(!P) return;
+  Object.assign(opt,P);
+  for(const c of CTRL) if(c.key in P) writeCtl(c,opt[c.key]);
+  $('#oPreset').value=name; applyFx('style');
+}
+$('#oPreset').onchange=e=>{ const v=e.target.value; e.target.value=lastPreset; pushUndo(); applyPreset(v); };
+for(const [a,b] of [['oPreset','oPreset2'],['oMode','oMode2'],['oMetric','oMetric2']]){
+  $('#'+b).innerHTML=$('#'+a).innerHTML; $('#'+b).value=$('#'+a).value;
+  $('#'+b).onchange=e=>{ $('#'+a).value=e.target.value; $('#'+a).dispatchEvent(new Event('change')); syncQuick(); };
+  $('#'+a).addEventListener('change',syncQuick);
+}
+$('#oView').onchange=e=>{
+  const v=e.target.value; e.target.value=opt.view; pushUndo(); e.target.value=v;
+  opt.view=v; opt.viewTouched=true;
+  opt.labelPos=opt.view==='bipartite'?0.7:0.5; writeCtl(ctl('oLabelPos'),opt.labelPos);
+  updateLegend(); relayout(true);
+};
+let nGesture=false; $('#oN').addEventListener('change',()=>{ nGesture=false; });
+$('#oN').oninput=e=>{ if(!nGesture){ pushUndo(); nGesture=true; } const v=parseInt(e.target.value,10); opt.N=v>2?v:null; refreshEdgeStyles(); };
+CTRL.forEach(c=>writeCtl(c,opt[c.key])); updateLegend();
+$('#btnRun').onclick=()=>implement();
+$('#btnUndo').onclick=()=>{ undo(); focusEditor(); };
+$('#btnRedo').onclick=()=>{ redo(); focusEditor(); };
+document.addEventListener('keydown',e=>{        // 표 밖(옵션 칸 등)에 포커스가 있을 때도 Ctrl+Z / Ctrl+Y
+  if(e.target===editor) return;
+  if(e.target.matches&&e.target.matches('input[type=number],input[type=text],textarea')) return;
+  if(!(e.ctrlKey||e.metaKey)) return;
+  const k=e.key.toLowerCase();
+  if(k==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); }
+  else if(k==='y'){ e.preventDefault(); redo(); }
+});
+document.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); implement(); } });
+
+function applyOptState(o,mode,preset){
+  for(const k of Object.keys(opt)) if(k in o) opt[k]=o[k];
+  if('viewTouched' in o) opt.viewTouched=o.viewTouched; else delete opt.viewTouched;
+  for(const c of CTRL) writeCtl(c,opt[c.key]);
+  $('#oView').value=opt.view; $('#oN').value=opt.N>2?opt.N:'';
+  if(mode&&[...$('#oMode').options].some(x=>x.value===mode)) $('#oMode').value=mode;
+  $('#oPreset').value=['clear','core','paper','custom'].includes(preset)?preset:'custom';
+  syncQuick(); updateLegend();
+}
+/* ---- 설정 저장/불러오기 (JSON) ---- */
+const SAVE_FORMAT='correlation-map', SAVE_VER=1;
+function buildSaveObject(){
+  const o={format:SAVE_FORMAT,version:SAVE_VER,savedAt:new Date().toISOString(),
+    table:{nv,data},
+    settings:{options:{...opt},preset:$('#oPreset').value,tableMode:$('#oMode').value},
+    canvas:null};
+  if(G && !G.stale) o.canvas={W,H,rs:G.rs,mode:G.mode,nodes:G.nodes.map(n=>({key:String(n.v),name:n.name,x:+(n.x/W).toFixed(5),y:+(n.y/H).toFixed(5)}))};
+  return o;
+}
+function loadSaveObject(o){
+  if(!o||o.format!==SAVE_FORMAT||!o.table||!Array.isArray(o.table.data)) throw new Error('상관 지도에서 저장한 파일이 아니에요.');
+  const n=o.table.nv|0;
+  if(!(n>=2&&n<=200)||o.table.data.length!==n+1||o.table.data.some(r=>!Array.isArray(r)||r.length!==n+1)) throw new Error('표 데이터 형식이 올바르지 않아요.');
+  if(editing) commitEdit();
+  pushUndo();
+  nv=n; data=o.table.data.map(r=>r.map(c=>c==null?'':String(c))); gsel={ar:0,ac:0,fr:0,fc:0}; buildGrid();
+  const st=o.settings||{};
+  applyOptState(Object.assign({},opt,st.options||{},{viewTouched:true}),st.tableMode,st.preset);
+  if(o.canvas){ pendingSave=o; implement(true); pendingSave=null; setMsg('저장해 둔 표·위치·설정을 불러왔어요.','ok'); }
+  else{ markDirty(true); markStale(); setMsg('표와 설정을 불러왔어요. ‘구현’을 눌러 주세요. (저장 당시 구현 전이라 위치 정보는 없어요.)','ok'); }
+}
+$('#btnSave').onclick=()=>{
+  const d=new Date(), z=x=>String(x).padStart(2,'0');
+  const name=`상관지도_${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.json`;
+  download(new Blob([JSON.stringify(buildSaveObject(),null,1)],{type:'application/json'}),name);
+  setMsg(G&&!G.stale?'표·노드 위치·설정을 JSON 파일로 저장했어요.':'표와 설정을 저장했어요. (구현 전이라 노드 위치는 포함되지 않았어요.)','ok');
+};
+$('#btnLoad').onclick=()=>$('#fileLoad').click();
+$('#fileLoad').onchange=e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{ try{ loadSaveObject(JSON.parse(rd.result)); }catch(err){ setMsg('불러오지 못했어요: '+err.message,'err'); } };
+  rd.readAsText(f,'utf-8');
+};
+window.__corr={buildSaveObject,loadSaveObject,pFromR,fmtR,get G(){return G;},get data(){return data;},get nv(){return nv;},implement,opt,get gsel(){return gsel;}};
+
+buildGrid();
+requestAnimationFrame(()=>{ focusEditor(); placeEditor(); });
+})();
+</script>
+</body>
+</html>
